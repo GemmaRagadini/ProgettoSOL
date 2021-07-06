@@ -17,7 +17,6 @@
 
 
 
- 
 
 /*NOTE : 
 - devo considerare che alcune opzioni vanno chiamate in ordine 
@@ -208,6 +207,7 @@ int main(int argc, char * argv[]) {
                     exit(EXIT_FAILURE); //un po' too much? 
                 }
 
+                printf("%s\n", (char*)buf);
 
                 //lo salvo nella cartella dirname se è specificata
                 if (options.dirname_Rr != NULL) {
