@@ -1,0 +1,6 @@
+num_workers = 1
+nome_socket = socket.skt
+spazio_server = 128000000
+max_file = 10000
+
+

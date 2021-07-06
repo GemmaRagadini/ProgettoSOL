@@ -1,0 +1,2 @@
+nome_socket = ../server/socket.skt
+dirname = ./dir
