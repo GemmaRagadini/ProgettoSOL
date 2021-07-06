@@ -10,6 +10,7 @@
 #include <sys/syscall.h>
 #include <fcntl.h>
 #include <sys/select.h>
+#include <signal.h>
 #include "works.h"
 #include "mutex.h"
 #include "tok_s.h"
@@ -21,6 +22,7 @@ int fd_skt;
 
 JobList coda; //coda di jobs che devono essere eseguiti
 int isClosing;//dice se il server è in fase di chiusura
+int closed; //per chiusura brutale 
 
 
 Coda_File storage; //struttura dati per i file 
@@ -37,7 +39,12 @@ static pthread_mutex_t mtx2 = PTHREAD_MUTEX_INITIALIZER; //mutex per la DS
 #define O_LOCK 4 
 #define NOFLAGS 0
 
-
+// Uscita immediata
+volatile sig_atomic_t sigquit = 0;
+// Uscita gentile
+volatile sig_atomic_t sighup = 0;
+// Uscita immediata
+volatile sig_atomic_t sigint = 0;
 
 /* 
     -per ora nessuno attende il ritorno dei thread
@@ -183,7 +190,7 @@ int Read(const char * pathname, int fd, char ** buf) {
     if ( ( *buf = contenuto_f(storage, pathname ) ) == NULL) return -1;
 
     
-    return 1; //è grande BUFSIZ, serve di più?
+    return 1;
 }
 
 
@@ -275,7 +282,7 @@ int readN(int N, int fd){
 
 static void * worker(void * arg){
     
-    while(1) {
+    while(!closed) {
         Pthread_mutex_lock(&mtx1);
 
         if (coda == NULL && isClosing) break;
@@ -492,7 +499,7 @@ static void * worker(void * arg){
         }
      
     }
-
+    printf("fine\n");
     return (void*)0;
 }
 
@@ -502,7 +509,72 @@ void cleanClosing() {
     close(fd_skt);
 }
 
-        
+
+
+void brutalClosing() {
+    closed = 1;
+    close(fd_skt);
+}
+
+
+
+void sighandler(int sig){
+    switch(sig){
+        case SIGQUIT:{
+            sigquit = 1;
+        } break;
+        case SIGHUP:{
+            sighup = 1;
+        } break;
+        case SIGINT:{
+            sigint = 1;
+        }
+        case SIGPIPE:{
+            ; // Ignoro SIGPIPE
+        }
+        default:{
+            abort();
+        }
+    }
+}
+    
+
+void installSigHand(){
+
+    struct sigaction sa;
+    sigset_t handlermask;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = sighandler;
+    
+    sigemptyset(&handlermask);
+    sigaddset(&handlermask, SIGHUP);
+    sigaddset(&handlermask, SIGQUIT);
+    sigaddset(&handlermask, SIGINT);
+    sigaddset(&handlermask, SIGPIPE);
+
+    if ( sigaction(SIGHUP, &sa, NULL) == -1 ){
+        perror("sigaction SIGHUP");
+        exit(EXIT_FAILURE);
+    }
+
+    if ( sigaction(SIGQUIT, &sa, NULL) == -1 ){
+        perror("sigaction SIGQUIT");
+        exit(EXIT_FAILURE);
+    }
+
+    if ( sigaction(SIGINT, &sa, NULL) == -1 ){
+        perror("sigaction SIGHUP");
+        exit(EXIT_FAILURE);
+    }
+
+    if ( sigaction(SIGPIPE, &sa, NULL) == -1 ){
+        perror("sigaction SIGPIPE");
+        exit(EXIT_FAILURE);
+    }
+
+}
+
+
 
 static void run_server(Parametri_server parametri) {
 
@@ -527,7 +599,7 @@ static void run_server(Parametri_server parametri) {
         exit(EXIT_FAILURE);
     }
 
-    while(1){
+    while(!sighup && !sigquit && !sigint) {
 
         if ( (fd_client = accept(fd_skt, NULL, 0)) == -1){
             perror("la socket è stata chiusa, chiusura in corso");
@@ -545,12 +617,18 @@ static void run_server(Parametri_server parametri) {
 
         Pthread_mutex_unlock(&mtx1);
         pthread_cond_signal(&cond);
-        //stampaLista(storage);
 
     }
+
+    if (sighup) {
+        cleanClosing();
+        return;
+    }
+
+    brutalClosing();
+
 }
 
-    
 
 int main(){
    
@@ -569,21 +647,24 @@ int main(){
     
     fclose(config); 
 
+    installSigHand();
+    //signal(SIGQUIT, sigQuitHandler);
     
     coda = (JobList)malloc(sizeof(JobElement)); //coda dei job
     coda = NULL;
     isClosing = 0; //metto nella struct parametri?
+    closed = 0;
     
 
     storage = (Coda_File)malloc(sizeof(File)); //DS per i file 
     storage = NULL;
    
-
+   
     //creo N thread workers:
     pthread_t workers[parametri.num_workers]; 
     for (int i = 0; i < parametri.num_workers; i++) {
         if (pthread_create(&workers[i], NULL, &worker , NULL) != 0 ) {
-            fprintf(stderr, "pthread_create failed (worker %d)\n", i);
+            fprintf(stderr, "creazione del thread (worker %d) fallita\n", i);
             return (EXIT_FAILURE);
         }
     }
@@ -591,11 +672,11 @@ int main(){
     //stampaLista(storage);
     //SOCKET:
     run_server(parametri);
+    printf("wu\n");
 
 
     //aspettare il ritorno dei thread
     for (int i = 0 ; i < parametri.num_workers; i++) pthread_join(workers[i], NULL);
-
 
 
     //chiusura di tutto 
