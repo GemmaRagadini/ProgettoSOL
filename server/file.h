@@ -353,12 +353,24 @@ int close_f(Coda_File *ds, const char * pathname, int fd) { //ritorna 0 in caso 
     return -1;
 }
 
-
-
-
-
-
-
+void closeStorage(Coda_File *ds) {
+    Coda_File corrente = *ds;
+    Coda_File precedente;
+    while (corrente != NULL){
+        precedente = corrente;
+        corrente = corrente->next;
+        lista_client cor = precedente->clients;
+        lista_client prec;
+        while (cor != NULL) {
+            prec = cor;
+            cor = cor->next;
+            free(prec);
+        }
+        free(precedente->pathname);
+        free(precedente->contenuto);
+        free(precedente);
+    }
+}
 
 
 #endif

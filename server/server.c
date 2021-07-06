@@ -20,6 +20,7 @@
 int fd_skt; 
 
 JobList coda; //coda di jobs che devono essere eseguiti
+int isClosing;//dice se il server è in fase di chiusura
 
 
 Coda_File storage; //struttura dati per i file 
@@ -52,8 +53,7 @@ static pthread_mutex_t mtx2 = PTHREAD_MUTEX_INITIALIZER; //mutex per la DS
     - la write sembrerebbe funzionare ma non ha un'opzione per testarla direttamente 
     - devo fare una libreria ? 
     - se il client non fa la closeFile e poi la closeConnection , il server cerca di ripetere l'ultima operazione e fallisce  ovviamente
-    - non ho testato quando si riempie lo spazio del server
-
+    - perché non posso fare due read consecutive ? 
 */
 
 int Open(const char * pathname,int fd, int flags) {
@@ -278,6 +278,7 @@ static void * worker(void * arg){
     while(1) {
         Pthread_mutex_lock(&mtx1);
 
+        if (coda == NULL && isClosing) break;
         while (coda == NULL) pthread_cond_wait(&cond, &mtx1); 
 
         JobList estratto = (JobList)malloc(sizeof(JobElement));
@@ -290,8 +291,6 @@ static void * worker(void * arg){
 
         int N; //numero file da leggere nel caso R 
         
-        char * buf = (char*)malloc(BUFSIZ * sizeof(char));
-
         size_t size;
 
         if (estratto->tipo_operazione == 'X') {
@@ -303,7 +302,7 @@ static void * worker(void * arg){
         printf("%c\n", estratto->tipo_operazione);
 
         char* pathname = (char*)malloc(BUFSIZ * sizeof(char));
-
+        char * buf;
 
         switch(estratto->tipo_operazione) {
             case 'o':
@@ -347,6 +346,8 @@ static void * worker(void * arg){
                     break;
                 }
 
+                buf = (char*)malloc(BUFSIZ * sizeof(char));
+
                 Pthread_mutex_lock(&mtx2);
 
 
@@ -370,6 +371,8 @@ static void * worker(void * arg){
                 }
 
                 ret = 1;
+
+                free(buf);
 
                 break;
             case 'R' :
@@ -423,7 +426,9 @@ static void * worker(void * arg){
                         ret = -1;
                         break;
                     }
-                    
+
+                    buf = (char*)malloc(BUFSIZ * sizeof(char));
+
                     if (read(estratto->fd, buf, size +1) == -1) {
                         perror("worker, SC read buffer, server");  //forse ci aggiungerei di scrivere in che caso sono
                         ret = -1;
@@ -432,6 +437,9 @@ static void * worker(void * arg){
                     Pthread_mutex_lock(&mtx2);
                     ret = Append(pathname, estratto->fd, buf, size);
                     Pthread_mutex_unlock(&mtx2);
+
+                    free(buf);
+
 
                 break;
 
@@ -464,6 +472,8 @@ static void * worker(void * arg){
 
         char k;
         int fd = estratto->fd;
+
+        free(pathname);
         free(estratto);
 
         if (read (fd, &k, sizeof(char)) != -1 ){ // e si è scollegato accidentalmente? 
@@ -487,6 +497,10 @@ static void * worker(void * arg){
 }
 
 
+void cleanClosing() {
+    isClosing = 1;
+    close(fd_skt);
+}
 
         
 
@@ -516,7 +530,7 @@ static void run_server(Parametri_server parametri) {
     while(1){
 
         if ( (fd_client = accept(fd_skt, NULL, 0)) == -1){
-            perror("server: accept");
+            perror("la socket è stata chiusa, chiusura in corso");
             break;
         } 
 
@@ -532,7 +546,6 @@ static void run_server(Parametri_server parametri) {
         Pthread_mutex_unlock(&mtx1);
         pthread_cond_signal(&cond);
         //stampaLista(storage);
-
 
     }
 }
@@ -559,6 +572,7 @@ int main(){
     
     coda = (JobList)malloc(sizeof(JobElement)); //coda dei job
     coda = NULL;
+    isClosing = 0; //metto nella struct parametri?
     
 
     storage = (Coda_File)malloc(sizeof(File)); //DS per i file 
@@ -579,8 +593,14 @@ int main(){
     run_server(parametri);
 
 
-    close(fd_skt);
-    
+    //aspettare il ritorno dei thread
+    for (int i = 0 ; i < parametri.num_workers; i++) pthread_join(workers[i], NULL);
+
+
+
+    //chiusura di tutto 
+    closeStorage(&storage);
+    closeListaJob(&coda);
 
     return 0; 
 }
