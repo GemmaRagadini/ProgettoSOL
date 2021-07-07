@@ -21,8 +21,7 @@
 int fd_skt; 
 
 JobList coda; //coda di jobs che devono essere eseguiti
-int isClosing;//dice se il server è in fase di chiusura
-int closed; //per chiusura brutale 
+
 
 
 Coda_File storage; //struttura dati per i file 
@@ -47,20 +46,12 @@ volatile sig_atomic_t sighup = 0;
 volatile sig_atomic_t sigint = 0;
 
 /* 
-    -per ora nessuno attende il ritorno dei thread
-    - mancano i segnali per far terminare il server 
-    - crea un thread che controlla la terminazione (sigwait) 
-    - va deciso come e se far terminare i client e come avvisare il server 
-    - manca ancora totalmente la terminazione di tutto 
-    - il client e il server condividono tok.h-> decidi se lasciarlo e motivarlo nella relazione o farne due copie (con nomi diversi) di entrambi 
     - richiesta - risposta 
     - master-workers 
-    - SE IL CLIENT SBAGLIA IL SERVER SI FERMA! -> stampando z , non capisco come possa fermarsi?
-    -gitHUb?
     - la write sembrerebbe funzionare ma non ha un'opzione per testarla direttamente 
     - devo fare una libreria ? 
-    - se il client non fa la closeFile e poi la closeConnection , il server cerca di ripetere l'ultima operazione e fallisce  ovviamente
-    - perché non posso fare due read consecutive ? 
+    - quando un client fallisce un'operazione e non va avanti il server dà problemi 
+    - controllare le chiusure-> in particolare quella brutale mi sembra non funzioni 
 */
 
 int Open(const char * pathname,int fd, int flags) {
@@ -75,7 +66,7 @@ int Open(const char * pathname,int fd, int flags) {
         case O_CREATE|O_LOCK:;
         case O_CREATE: 
                 if (cerca_f(storage, pathname) == 1) {
-                printf("Open con O_CREATE di un file già presente nello sorage\n");
+                printf("Fallita creazione di un file che era già presente sullo storage\n");
                 return -1;
             }
 
@@ -90,7 +81,7 @@ int Open(const char * pathname,int fd, int flags) {
         case 0: 
 
             if (cerca_f(storage, pathname) == -1) {
-                printf("open senza O_CREATE di un file non presente nello storage\n");
+                printf("fallita apertura di un file non presente nello storage\n");
                 return -1;
             }
 
@@ -177,6 +168,11 @@ int Read(const char * pathname, int fd, char ** buf) {
         return -1;
     }
 
+    if (storage == NULL) {
+        fprintf(stderr, "la lettura di %s è fallita perché lo storage è vuoto\n", pathname);
+        return -1;
+    }
+
     if (cerca_f(storage, pathname) == -1) {
         perror("Read: il file non è presente nello storage, server");
         return -1;
@@ -219,7 +215,7 @@ int Append(char * pathname, int fd, char * buf, size_t size) {
         return -1;
     }
 
-    return 1;
+    return 0;
 }
 
 
@@ -282,16 +278,21 @@ int readN(int N, int fd){
 
 static void * worker(void * arg){
     
-    while(!closed) {
+    while(!parametri.closed) {
         Pthread_mutex_lock(&mtx1);
 
-        if (coda == NULL && isClosing) break;
-        while (coda == NULL) pthread_cond_wait(&cond, &mtx1); 
+        if ( (coda == NULL && parametri.isClosing) || parametri.closed) break;
+        while (coda == NULL && !parametri.closed) pthread_cond_wait(&cond, &mtx1); 
+        if ( (coda == NULL && parametri.isClosing) || parametri.closed) break;
+
 
         JobList estratto = (JobList)malloc(sizeof(JobElement));
         estratto = Pop_W(&coda);
         Pthread_mutex_unlock(&mtx1);
         
+        char tipo_op; //mi serve per ricordarmelo anche dopo aver fatto la free(estratto) 
+        int fd; //mi serve per lo stesso motivo 
+
         int ret; //valore da ritornare al client 
 
         int l; //grandezza del pathname
@@ -302,8 +303,7 @@ static void * worker(void * arg){
 
         if (estratto->tipo_operazione == 'X') {
             if (read(estratto->fd, &(estratto->tipo_operazione), sizeof(char)) <= 0){
-                perror("worker : SC read fd, server\n");
-                continue;
+                continue; //cosa voleva dire continue ? 
             }
         }
         printf("%c\n", estratto->tipo_operazione);
@@ -358,26 +358,32 @@ static void * worker(void * arg){
                 Pthread_mutex_lock(&mtx2);
 
 
+                ret = 0;
+
                 if ( Read(pathname, estratto->fd, &buf )== -1) {
-                    perror("worker: Read fallita, server");
+                    fprintf(stderr,"lettura del file %s dallo storage fallita\n", pathname);
                     ret = -1;
                 }
 
                 Pthread_mutex_unlock(&mtx2);
+
+                if (write(estratto->fd, &ret, sizeof(int)) <= 0) {
+                    perror("worker:SC write ret, server\n");
+                    break; //va bene?
+                }
+
+                if (ret == -1) break; 
+
                 size = strlen(buf);
                 if (write(estratto->fd, &size, sizeof(size_t) ) == -1 ) {
                     perror("worker : SC write size, server");
-                    ret = -1; //non serve a niente in questo caso penso 
                     break;
                 }
 
                 if (write(estratto->fd, buf, size +1) == -1) { 
                     perror ("worker : SC write buf, server");
-                    ret = -1;
                     break;
                 }
-
-                ret = 1;
 
                 free(buf);
 
@@ -437,7 +443,7 @@ static void * worker(void * arg){
                     buf = (char*)malloc(BUFSIZ * sizeof(char));
 
                     if (read(estratto->fd, buf, size +1) == -1) {
-                        perror("worker, SC read buffer, server");  //forse ci aggiungerei di scrivere in che caso sono
+                        perror("worker, SC read bufferr");  //forse ci aggiungerei di scrivere in che caso sono
                         ret = -1;
                         break;
                     }
@@ -472,19 +478,31 @@ static void * worker(void * arg){
                 break;
         }
 
-        if (write(estratto->fd, &ret, sizeof(int)) <= 0) {
-            perror("worker:SC write ret, server\n");
-            break; //lo devo gestire con i segnali penso 
+        if (estratto->tipo_operazione != 'r') {
+            if (write(estratto->fd, &ret, sizeof(int)) <= 0) {
+                perror("worker:SC write ret, server\n");
+                break; //lo devo gestire con i segnali penso 
+            }
+        }
+
+        tipo_op = estratto->tipo_operazione;
+        fd = estratto->fd;
+
+
+        if (ret == -1 && tipo_op != 'o') { //se è fallita la open non è stato aperto niente 
+            Pthread_mutex_lock(&mtx2);
+            tipo_op = 'c';
+            Close(pathname, estratto->fd);
+            Pthread_mutex_unlock(&mtx2);
         }
 
         char k;
-        int fd = estratto->fd;
 
         free(pathname);
         free(estratto);
 
         if (read (fd, &k, sizeof(char)) != -1 ){ // e si è scollegato accidentalmente? 
-            if (k != 'z') { // se è z vuol dire che il client si sta per disconnettere e non manderà più richieste 
+            if (k != 'z' && k != tipo_op) { // se è z vuol dire che il client si sta per disconnettere e non manderà più richieste se è = tipo_op vuol dire che il client si è scollagato accidentalmente 
                 JobList job = (JobList)malloc(sizeof(JobElement)); 
                 job->tipo_operazione = k; 
                 job->fd = fd;
@@ -493,27 +511,29 @@ static void * worker(void * arg){
 
                 Pthread_mutex_lock(&mtx1);
                 Push_W(&coda, job);
-                pthread_cond_signal(&cond); //boh ? 
+                pthread_cond_signal(&cond);  
                 Pthread_mutex_unlock(&mtx1); 
             }
         }
      
     }
-    printf("fine\n");
     return (void*)0;
 }
 
 
 void cleanClosing() {
-    isClosing = 1;
+    parametri.isClosing = 1;
     close(fd_skt);
 }
 
 
 
 void brutalClosing() {
-    closed = 1;
+    parametri.closed = 1;
     close(fd_skt);
+    Pthread_mutex_lock(&mtx1);
+    pthread_cond_signal(&cond);  
+    Pthread_mutex_unlock(&mtx1);
 }
 
 
@@ -652,8 +672,8 @@ int main(){
     
     coda = (JobList)malloc(sizeof(JobElement)); //coda dei job
     coda = NULL;
-    isClosing = 0; //metto nella struct parametri?
-    closed = 0;
+    parametri.isClosing = 0; //dice se il server è in fase di chiusura pulita
+    parametri.closed = 0; //per chiusura immediata
     
 
     storage = (Coda_File)malloc(sizeof(File)); //DS per i file 
@@ -672,7 +692,6 @@ int main(){
     //stampaLista(storage);
     //SOCKET:
     run_server(parametri);
-    printf("wu\n");
 
 
     //aspettare il ritorno dei thread
@@ -682,6 +701,7 @@ int main(){
     //chiusura di tutto 
     closeStorage(&storage);
     closeListaJob(&coda);
+    free(parametri.nome_socket_server);
 
     return 0; 
 }

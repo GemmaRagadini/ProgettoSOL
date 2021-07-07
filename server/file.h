@@ -7,9 +7,9 @@
 #include <string.h>
 #include "configura_server.h"
 
-/* -se due file hanno lo stesso nome che succede?
-- controlla che il rimpiazzamento sia FIFO
-- forse quando elimino un file elimina solo il contenuto ma non il pathname->perché ? 
+/*
+- i controlli sullo spazio totale del server devono comprendere il +1?
+- lo spazio allocato non conta come memoria occupata? 
 */ 
 
 
@@ -160,8 +160,14 @@ int open_c(Coda_File *ds, const char * pathname, int fd) { //usato quando un cli
 }
 
 
-int cerca_f(Coda_File ds,const char * pathname) { //1 se il file è presente, -1 altrimenti 
+int cerca_f(Coda_File ds,const char * pathname) { //1 se il file è presente, -1 altrimenti
+    if (pathname == NULL) {
+        perror("cerca_f : argomento illegale");
+        return -1;
+    }
+
     if (ds == NULL) return -1;
+
     Coda_File corrente = ds;
     while (corrente != NULL) {
         if ( strcmp(corrente->pathname, pathname) == 0 ) return 1;
@@ -183,13 +189,15 @@ int eliminaUnFile(Coda_File *ds, Parametri_server * parametri){ //elimino un fil
     Coda_File corrente = *ds;
     while(corrente->next != NULL) corrente = corrente->next;
     parametri->spazio_occupato = parametri->spazio_occupato- spazioOccupato(*corrente); //va bene? 
+    free(corrente->pathname);
+    free(corrente->contenuto);
     free(corrente);
     (parametri->n_file)--;
     return 1;
 }
 
 
-
+/*ritorna il contenuto del file pathname sullo storage. Se il file è vuoto ritorna NULL*/
 char * contenuto_f(Coda_File ds, const char * pathname) {
     if (cerca_f(ds, pathname ) == -1) {
         perror("il file di cui si cerca il contenuto non è presente nel server, server\n");
@@ -197,13 +205,7 @@ char * contenuto_f(Coda_File ds, const char * pathname) {
     }
     Coda_File corrente = ds;
     while (corrente != NULL) {
-        if (strcmp(corrente->pathname, pathname) == 0) {
-            if (corrente->contenuto == NULL) {
-                perror("il file è vuoto");
-                return NULL;
-            }
-            return corrente->contenuto;
-        }
+        if (strcmp(corrente->pathname, pathname) == 0) return corrente->contenuto; //se è null ritorna null
         corrente = corrente->next;
     }
     return NULL;
@@ -230,19 +232,31 @@ int append(Coda_File * ds, const char * pathname, char * buf, Parametri_server *
         return -1;
     }
     
+    if (cerca_f(*ds, pathname) == -1) {
+        fprintf(stderr, "il file %s non è presente nello storage\n", pathname);
+        return -1;
+    }
+
     if (strlen(buf) + parametri->spazio_occupato > parametri->spazio_server ) {
         if (liberaSpazio(ds, buf, parametri) == -1) return -1;
     }
 
+
     Coda_File corrente = *ds;
     while (corrente != NULL) {
+
         if (strcmp(corrente->pathname, pathname) == 0) {
 
-            corrente->contenuto=(char*)malloc(strlen(buf)+1);
             if (corrente->contenuto == NULL) {
+                free(corrente->contenuto); //non so se questa cosa va bene
+                corrente->contenuto = (char*)malloc( (strlen(buf)+1) * sizeof(char) ); 
                 strcpy(corrente->contenuto, buf);
                 parametri->spazio_occupato = parametri->spazio_occupato + spazioOccupato(*corrente);
                 return 1;
+            }
+            //corrente->contenuto != NULL
+            while ( strlen(corrente->contenuto) < strlen(corrente->contenuto) + strlen(buf) ) {
+                corrente->contenuto = (char*)realloc(corrente->contenuto, 2 * (strlen(corrente->contenuto) +1) );
             }
             strcpy(corrente->contenuto, strcat(corrente->contenuto, buf));
             parametri->spazio_occupato = parametri->spazio_occupato + spazioOccupato(*corrente);
@@ -250,8 +264,9 @@ int append(Coda_File * ds, const char * pathname, char * buf, Parametri_server *
         }
         corrente = corrente->next;
     }
-    parametri->spazio_occupato = parametri->spazio_occupato + spazioOccupato(*corrente);
-    return 1;
+    
+    fprintf(stderr, "append di %s non andata a buon fine\n", pathname);
+    return -1;
 }
         
 
@@ -267,7 +282,9 @@ int push_f( Coda_File * ds, const char * pathname, int fd, Parametri_server * pa
     }
 
     Coda_File nuovo = (Coda_File)malloc(sizeof(File));
-    nuovo->pathname = (char*)malloc(100 * sizeof(char)); //troppo spazio ? 
+    nuovo->pathname = (char*)malloc(100 * sizeof(char)); 
+    nuovo->contenuto = (char*)malloc(10 * sizeof(char)); 
+    nuovo->contenuto = NULL;
 
     strcpy(nuovo->pathname, pathname);
 

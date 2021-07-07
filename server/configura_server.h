@@ -17,6 +17,8 @@ typedef struct _parametri_server{
     char* nome_socket_server;
     int max_file;
     int n_file;
+    int isClosing;
+    int closed;
 
 }Parametri_server;
 
@@ -35,14 +37,13 @@ void Configura(FILE * config, Parametri_server * parametri) {
 
     char * buffer = NULL; //per tenere la riga letta dal file
     char * ultimo; //per tenere l'ultimo token != NULL
-    parametri->nome_socket_server = (char*)malloc(20*sizeof(char));
+    parametri->nome_socket_server = (char*)malloc(30*sizeof(char));
     
     errorNUll(buffer = malloc( MAX_LEN * sizeof(char) ), config);
 
     while( fgets(buffer, MAX_LEN , config) != NULL ) {
         //nome_socket
         if( strstr(buffer, "nome_socket") != NULL) {
-            errorNUll(ultimo = malloc( MAX_LEN * sizeof(char) ), config);
             ultimo = tokenizer_r(buffer);
             ultimo[strlen(ultimo)-1] = '\0';
             strcpy(parametri->nome_socket_server, ultimo);
@@ -50,8 +51,6 @@ void Configura(FILE * config, Parametri_server * parametri) {
 
         //parametri->num_workers
         if( strstr(buffer, "num_workers") != NULL) { //sono nella riga dove è definito il numero di workers 
-            errorNUll(ultimo = malloc( MAX_LEN * sizeof(char) ), config);
-
             ultimo = tokenizer_r(buffer); 
             ultimo[strlen(ultimo)-1] = '\0';
             //sono arrivata alla fine , ultimo è l'ultimo token , quello che mi interessa 
@@ -60,7 +59,6 @@ void Configura(FILE * config, Parametri_server * parametri) {
 
         // parametri->spazio_server 
         if( strstr(buffer, "spazio_server") != NULL) {
-            errorNUll(ultimo = malloc( MAX_LEN * sizeof(char) ), config);
             ultimo = tokenizer_r(buffer);
             ultimo[strlen(ultimo)-1] = '\0';
             parametri->spazio_server = atoi(ultimo);
@@ -68,13 +66,13 @@ void Configura(FILE * config, Parametri_server * parametri) {
 
         //parametri->max_file
         if( strstr(buffer, "max_file") != NULL) {
-            errorNUll(ultimo = malloc( MAX_LEN * sizeof(char) ), config);
             ultimo = tokenizer_r(buffer);
             ultimo[strlen(ultimo)-1] = '\0';
             parametri->max_file = atoi(ultimo);
         }
-
+        
     }
+    free(buffer);
 }
 
 #endif
