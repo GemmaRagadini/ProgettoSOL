@@ -9,10 +9,8 @@
 /* 
     - metti errno = 0 prima di ogni funzione che lo setta 
     - errno deve essere settato opportunatamente 
-    - non riesco ad aprire dirname ->ho dovuto metterne una specifica per provarlo 
     - controllare -r e -R se sono senza dirname
 
-    
 */ 
 
 #define O_CREATE 8
@@ -148,6 +146,7 @@ int openFile(const char* pathname, int flags) {
 parametro ‘buf’, mentre ‘size’ conterrà la dimensione del buffer dati (ossia la dimensione in bytes del file letto). In
 caso di errore, ‘buf‘e ‘size’ non sono validi. Ritorna 0 in caso di successo, -1 in caso di fallimento, errno viene
 settato opportunamente.*/
+//se non specificato -d dirname la readFile legge ma non salva il contenuto da nessuna parte 
 int readFile(const char* pathname, void** buf, size_t* size){ 
      if (pathname == NULL || buf == NULL || size == NULL) {
         perror("readFile: argomento illegale");
@@ -177,6 +176,13 @@ int readFile(const char* pathname, void** buf, size_t* size){
         return -1;
     }
 
+    if (read(fd_skt, &ret, sizeof(int)) == -1){
+        perror("readFile: SC read");
+        return -1;
+    }
+
+    if (ret == -1) return -1;
+
     if (read(fd_skt, size, sizeof(size_t)) == -1) { // va bene il sizeof?
         perror("readFile: SC read");
         return -1;
@@ -184,7 +190,7 @@ int readFile(const char* pathname, void** buf, size_t* size){
 
     char * buffer = (char*)malloc(( *size +1) * sizeof(char));
 
-    if (read(fd_skt, buffer, *size + 1) == -1){ //non penso 
+    if (read(fd_skt, buffer, *size + 1) == -1){ 
         perror("readFile: SC read");
         return -1;
     }
@@ -192,14 +198,12 @@ int readFile(const char* pathname, void** buf, size_t* size){
     strcpy(*buf, buffer);
 
 
-    if (read(fd_skt, &ret, sizeof(int)) == -1){
-        perror("readFile: SC read");
-        return -1;
-    }
+    
 
     resetPath();
 
  return ret;
+
  }
 
 

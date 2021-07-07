@@ -22,8 +22,7 @@
 - devo considerare che alcune opzioni vanno chiamate in ordine 
 - errno ?
 - l'ordine delle opzioni influisce  
-- non mi convince che peer la readFile l'utente debba inserire il pathname intero , se non l'ha caricato lui ? 
-
+- optarg nel caso -R 
 */
 
 
@@ -193,21 +192,19 @@ int main(int argc, char * argv[]) {
         size_t size;
         for (int j = 0; j < options.rOptionsNumber; j++) {
             for (int i = 0 ; i < options.rOptions->namesNumber; i++) {
-                if (openFile( (options.rOptions[j]).names[i] , O_CREATE) == -1) {
 
-                    if (openFile( (options.rOptions[j]).names[i] , 0 ) == -1) {
-                        if (options.print== 1) fprintf(stderr, "openFile di %s fallita\n", options.rOptions[j].names[i]);
-                        exit(EXIT_FAILURE);
-                    }
-                    if (options.print==1) printf("openFile di %s effettuata con successo\n", options.rOptions[j].names[i] );
+                if (openFile( (options.rOptions[j]).names[i] , 0 ) == -1) {
+                    if (options.print== 1) fprintf(stderr, "openFile di %s fallita\n", options.rOptions[j].names[i]);
+                    exit(EXIT_FAILURE);
                 }
+                if (options.print==1) printf("openFile di %s effettuata con successo\n", options.rOptions[j].names[i] );
+            
 
                 if (readFile(options.rOptions[j].names[i], &buf, &size) == -1) {
                     if (options.print == 1) fprintf(stderr,"readFile di %s fallita\n", options.rOptions[j].names[i]);
                     exit(EXIT_FAILURE); //un po' too much? 
                 }
 
-                printf("%s\n", (char*)buf);
 
                 //lo salvo nella cartella dirname se è specificata
                 if (options.dirname_Rr != NULL) {
