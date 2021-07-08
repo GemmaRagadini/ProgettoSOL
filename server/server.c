@@ -38,20 +38,14 @@ static pthread_mutex_t mtx2 = PTHREAD_MUTEX_INITIALIZER; //mutex per la DS
 #define O_LOCK 4 
 #define NOFLAGS 0
 
-// Uscita immediata
-volatile sig_atomic_t sigquit = 0;
-// Uscita gentile
-volatile sig_atomic_t sighup = 0;
-// Uscita immediata
-volatile sig_atomic_t sigint = 0;
+
 
 /* 
     - richiesta - risposta 
     - master-workers 
     - la write sembrerebbe funzionare ma non ha un'opzione per testarla direttamente 
     - devo fare una libreria ? 
-    - quando un client fallisce un'operazione e non va avanti il server dà problemi 
-    - controllare le chiusure-> in particolare quella brutale mi sembra non funzioni 
+    - come mai se faccio ctrl+c subito la open la fa comunque ? 
 */
 
 int Open(const char * pathname,int fd, int flags) {
@@ -135,7 +129,6 @@ int Write(const char * pathname, int fd) { //funziona ovviamente solo nel caso d
         return -1;
     }
 
-    printf("%s\n", contenuto_f(storage, pathname));
     
 
     return 0;
@@ -163,6 +156,7 @@ int Close(const char * pathname, int fd) {
 
 int Read(const char * pathname, int fd, char ** buf) {
 
+
     if (pathname == NULL) {
         perror("Read : pathname illegale, server");
         return -1;
@@ -183,7 +177,7 @@ int Read(const char * pathname, int fd, char ** buf) {
         return -1;
     }
     
-    if ( ( *buf = contenuto_f(storage, pathname ) ) == NULL) return -1;
+    if ( ( strcpy(*buf, contenuto_f(storage, pathname ) ) ) == NULL) return -1;
 
     
     return 1;
@@ -279,12 +273,13 @@ int readN(int N, int fd){
 static void * worker(void * arg){
     
     while(!parametri.closed) {
+
         Pthread_mutex_lock(&mtx1);
 
         if ( (coda == NULL && parametri.isClosing) || parametri.closed) break;
         while (coda == NULL && !parametri.closed) pthread_cond_wait(&cond, &mtx1); 
         if ( (coda == NULL && parametri.isClosing) || parametri.closed) break;
-
+        
 
         JobList estratto = (JobList)malloc(sizeof(JobElement));
         estratto = Pop_W(&coda);
@@ -353,7 +348,7 @@ static void * worker(void * arg){
                     break;
                 }
 
-                buf = (char*)malloc(BUFSIZ * sizeof(char));
+                buf = (char*)malloc(BUFSIZ * sizeof(char) );
 
                 Pthread_mutex_lock(&mtx2);
 
@@ -375,6 +370,7 @@ static void * worker(void * arg){
                 if (ret == -1) break; 
 
                 size = strlen(buf);
+
                 if (write(estratto->fd, &size, sizeof(size_t) ) == -1 ) {
                     perror("worker : SC write size, server");
                     break;
@@ -450,8 +446,8 @@ static void * worker(void * arg){
                     Pthread_mutex_lock(&mtx2);
                     ret = Append(pathname, estratto->fd, buf, size);
                     Pthread_mutex_unlock(&mtx2);
-
                     free(buf);
+
 
 
                 break;
@@ -501,8 +497,9 @@ static void * worker(void * arg){
         free(pathname);
         free(estratto);
 
-        if (read (fd, &k, sizeof(char)) != -1 ){ // e si è scollegato accidentalmente? 
-            if (k != 'z' && k != tipo_op) { // se è z vuol dire che il client si sta per disconnettere e non manderà più richieste se è = tipo_op vuol dire che il client si è scollagato accidentalmente 
+
+        if (read (fd, &k, sizeof(char)) > 0 && !parametri.closed ){ // e si è scollegato accidentalmente? 
+            if (k != 'z') { // se è z vuol dire che il client si sta per disconnettere e non manderà più richieste se è = tipo_op vuol dire che il client si è scollagato accidentalmente 
                 JobList job = (JobList)malloc(sizeof(JobElement)); 
                 job->tipo_operazione = k; 
                 job->fd = fd;
@@ -517,38 +514,31 @@ static void * worker(void * arg){
         }
      
     }
+
     return (void*)0;
 }
 
-
-void cleanClosing() {
-    parametri.isClosing = 1;
-    close(fd_skt);
-}
-
-
-
-void brutalClosing() {
-    parametri.closed = 1;
-    close(fd_skt);
-    Pthread_mutex_lock(&mtx1);
-    pthread_cond_signal(&cond);  
-    Pthread_mutex_unlock(&mtx1);
-}
 
 
 
 void sighandler(int sig){
     switch(sig){
-        case SIGQUIT:{
-            sigquit = 1;
-        } break;
-        case SIGHUP:{
-            sighup = 1;
-        } break;
+        
+        case SIGHUP:
+            close(fd_skt);
+            parametri.isClosing = 1;
+         break;
+        
+        case SIGQUIT:
+
         case SIGINT:{
-            sigint = 1;
-        }
+            close(fd_skt);
+            parametri.closed = 1;
+            close(fd_skt);
+            Pthread_mutex_lock(&mtx1);
+            pthread_cond_signal(&cond);  
+            Pthread_mutex_unlock(&mtx1);
+        }break;
         case SIGPIPE:{
             ; // Ignoro SIGPIPE
         }
@@ -619,7 +609,7 @@ static void run_server(Parametri_server parametri) {
         exit(EXIT_FAILURE);
     }
 
-    while(!sighup && !sigquit && !sigint) {
+    while(!parametri.isClosing && !parametri.closed) {
 
         if ( (fd_client = accept(fd_skt, NULL, 0)) == -1){
             perror("la socket è stata chiusa, chiusura in corso");
@@ -640,12 +630,7 @@ static void run_server(Parametri_server parametri) {
 
     }
 
-    if (sighup) {
-        cleanClosing();
-        return;
-    }
-
-    brutalClosing();
+    close(fd_skt);
 
 }
 
@@ -702,6 +687,8 @@ int main(){
     closeStorage(&storage);
     closeListaJob(&coda);
     free(parametri.nome_socket_server);
+ 
+ 
 
     return 0; 
 }

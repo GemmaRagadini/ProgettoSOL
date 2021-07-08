@@ -25,6 +25,7 @@ typedef struct _file {
     char * pathname;
     lista_client clients; 
     char * contenuto;
+    long size;
     struct _file * next;
 }File;
 
@@ -227,6 +228,7 @@ int liberaSpazio(Coda_File *ds, char * buf, Parametri_server * parametri){
 
 
 int append(Coda_File * ds, const char * pathname, char * buf, Parametri_server *parametri) { 
+
     if (*ds == NULL) {
         perror("append: lo storage è vuoto");
         return -1;
@@ -248,17 +250,26 @@ int append(Coda_File * ds, const char * pathname, char * buf, Parametri_server *
         if (strcmp(corrente->pathname, pathname) == 0) {
 
             if (corrente->contenuto == NULL) {
-                free(corrente->contenuto); //non so se questa cosa va bene
+                free(corrente->contenuto); 
                 corrente->contenuto = (char*)malloc( (strlen(buf)+1) * sizeof(char) ); 
+                corrente->size = (strlen(buf)+1) * sizeof(char);
+
                 strcpy(corrente->contenuto, buf);
                 parametri->spazio_occupato = parametri->spazio_occupato + spazioOccupato(*corrente);
+
                 return 1;
             }
-            //corrente->contenuto != NULL
-            while ( strlen(corrente->contenuto) < strlen(corrente->contenuto) + strlen(buf) ) {
-                corrente->contenuto = (char*)realloc(corrente->contenuto, 2 * (strlen(corrente->contenuto) +1) );
+            
+            while ( corrente->size < strlen(corrente->contenuto) + strlen(buf) + 2  ) {
+                corrente->contenuto = (char*)realloc(corrente->contenuto, 2 * corrente->size);
+                corrente->size *=2;
             }
-            strcpy(corrente->contenuto, strcat(corrente->contenuto, buf));
+
+            printf("%ld\n", corrente->size);
+            printf("%ld\n", strlen(corrente->contenuto ) + strlen(buf) +1 );
+
+            corrente->contenuto = strcat(corrente->contenuto, buf);
+
             parametri->spazio_occupato = parametri->spazio_occupato + spazioOccupato(*corrente);
             return 1;
         }
@@ -276,13 +287,18 @@ int push_f( Coda_File * ds, const char * pathname, int fd, Parametri_server * pa
 
     if (parametri->n_file == parametri->max_file) eliminaUnFile(ds, parametri);
 
+    if (pathname == NULL) {
+        perror("push_f: argomento illegale");
+        return -1;
+    }
+
     if ( cerca_f(*ds, pathname) == 1 ){
         perror("push di un file già presente nello storage, server\n");
         return -1;
     }
 
     Coda_File nuovo = (Coda_File)malloc(sizeof(File));
-    nuovo->pathname = (char*)malloc(100 * sizeof(char)); 
+    nuovo->pathname = (char*)malloc( (strlen(pathname)+1) * sizeof(char)); 
     nuovo->contenuto = (char*)malloc(10 * sizeof(char)); 
     nuovo->contenuto = NULL;
 
@@ -306,7 +322,7 @@ int push_f( Coda_File * ds, const char * pathname, int fd, Parametri_server * pa
     nuovo->next = *ds;
     *ds = nuovo;
     (parametri->n_file)++;
-    printf("%ld\n", parametri->spazio_occupato);
+
     return 1;
 }
 
@@ -320,8 +336,8 @@ int write_f(Coda_File *ds, const char * pathname, char * buffer, Parametri_serve
     Coda_File corrente = *ds; 
     while (corrente != NULL) {
         if (strcmp(corrente->pathname, pathname) == 0) {
-
-            corrente->contenuto = (char*)malloc(strlen(buffer)+ 1);
+            corrente->contenuto = (char*)realloc(corrente->contenuto,  (strlen(buffer)+ 1) * sizeof(char) ); //se è già scritto sovrascriverà
+            corrente->size = (strlen(buffer)+ 1) * sizeof(char);
             strcpy(corrente->contenuto, buffer);
             parametri->spazio_occupato = parametri->spazio_occupato + spazioOccupato(*corrente);
             return 1;
