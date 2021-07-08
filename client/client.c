@@ -109,7 +109,6 @@ int main(int argc, char * argv[]) {
     } 
     if ( strcmp(options.socketname, nome_socket_client ) != 0 ) {
         strcpy(nome_socket_client, options.socketname);
-        sleep(options.waitTime);
     }
 
     //connessione con il server 
@@ -121,6 +120,7 @@ int main(int argc, char * argv[]) {
 
     if (options.WOptionsNumber != 0) {
 
+    sleep(options.waitTime);
 
         for (int i = 0; i < options.WOptionsNumber; i++) {
             for (int j = 0 ; j < (options.WOptions[i]).namesNumber; j++) {
@@ -137,9 +137,6 @@ int main(int argc, char * argv[]) {
                 if (options.print==1) printf("openFile di %s effettuata con successo\n", options.WOptions[i].names[j] );
 
                 //qui è stato aperto con successo con O_CREATE
-
-
-
 
                 FILE* file;
                 if ( ( file = fopen(options.WOptions[i].names[j], "r") ) == NULL) {
@@ -184,10 +181,12 @@ int main(int argc, char * argv[]) {
                 
             }
         }
-        sleep(options.waitTime);
     }
 
     if (options.rOptionsNumber != 0) { //aggiungere di salvare in dirname 
+
+        sleep(options.waitTime);
+
         void* buf = (void*)malloc(BUFSIZ * sizeof(void));
         size_t size;
         for (int j = 0; j < options.rOptionsNumber; j++) {
@@ -253,19 +252,21 @@ int main(int argc, char * argv[]) {
             }
 
         }
-        sleep(options.waitTime);
+ 
     }
 
 
 
     if (options.dirname_w != NULL) { //caso w 
-        w_file_selector(options.dirname_w, &(options.nFileDaScrivere), options.print); //chiama la append sui i file nella directory dirname 
         sleep(options.waitTime);
+        w_file_selector(options.dirname_w, &(options.nFileDaScrivere), options.print); //chiama la append sui i file nella directory dirname 
     }
 
 
 
     if (options.nFileDaLeggere != 0) {
+        sleep(options.waitTime);
+
         if (options.dirname_Rr == NULL) {
             if (options.print == 1) fprintf(stderr, "L'opzione R può essere usata solo congiuntamente all'opzione d\n");
             exit(EXIT_FAILURE);
@@ -275,7 +276,6 @@ int main(int argc, char * argv[]) {
             exit(EXIT_FAILURE);
         }
         if (options.print==1) printf("readNFiles effettuata con successo\n");
-        sleep(options.waitTime);
     }
 
 
