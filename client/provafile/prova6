@@ -1,0 +1,9 @@
+el sistema (NOTA: tale file non è un header file quindi non va incluso ma va parsato
+opportunamente!). Il formato di tale file non viene specificato e deve essere deciso e descritto nella relazione dallo
+studente. Il file conterrà tutti i parametri che definiscono la configurazione del server, come ad esempio il numero di
+thread workers, la dimensione dello spazio di memorizzazione, il nome del socket file, ed altri parametri che lo
+studente ritiene utili.
+Il processo server accetta connessioni di tipo AF_UNIX da parte dei client. Il nome del file associato al socket è
+pubblico e comunque conosciuto ai client (ad esempio “-f /tmp/LSOfiletorage.sk”). Tale processo rimane sempre
+attivo in attesa di nuove connessioni da parte di nuovi client oppure in attesa di richieste di operazioni da eseguire
+inviate attraverso le connession

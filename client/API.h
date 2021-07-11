@@ -9,7 +9,7 @@
 /* 
     - metti errno = 0 prima di ogni funzione che lo setta 
     - errno deve essere settato opportunatamente 
-    - controllare -r e -R se sono senza dirname
+    - la R non funziona fputs (anche nella r) 
 
 */ 
 
@@ -26,6 +26,10 @@ void resetPath(){
 }
 
 
+/*Viene aperta una connessione AF_UNIX al socket file sockname. Se il server non accetta immediatamente la
+richiesta di connessione, la connessione da parte del client viene ripetuta dopo ‘msec’ millisecondi e fino allo
+scadere del tempo assoluto ‘abstime’ specificato come terzo argomento. Ritorna 0 in caso di successo, -1 in caso
+di fallimento, errno viene settato opportunamente.*/
 int openConnection( const char* sockname, int msec, const struct timespec abstime){
 
     struct sockaddr_un sa; 
@@ -156,8 +160,7 @@ int readFile(const char* pathname, void** buf, size_t* size){
     int ret;
     char tipo_op = 'r';
 
-    
-    size = (size_t*)malloc(sizeof(size_t)); //boh 
+    //size = (size_t*)malloc(sizeof(size_t)); //boh 
 
     if ( write(fd_skt, &tipo_op, sizeof(char)) == -1) {
         perror("readFile: SC write");
@@ -188,17 +191,14 @@ int readFile(const char* pathname, void** buf, size_t* size){
         return -1;
     }
 
-    char * buffer = (char*)malloc(( *size +1) * sizeof(char));
+    *buf = (void*)malloc((*size+1)*sizeof(char));
 
-    if (read(fd_skt, buffer, *size + 1) == -1){ 
+
+    if (read(fd_skt, *buf, *size + 1) == -1){ 
         perror("readFile: SC read");
         return -1;
     }
 
-    strcpy(*buf, buffer);
-
-
-    
 
     resetPath();
 
@@ -290,7 +290,7 @@ int readNFiles(int N, const char* dirname) {
 
         char * nomecompleto = (char*)malloc((strlen(dirname)+ strlen(nomefile)+ 1)*sizeof(char));
         strcpy( nomecompleto,dirname);
-        nomecompleto[strlen(nomecompleto)-1] = '\0';
+        nomecompleto[strlen(nomecompleto)] = '\0';
         strcat(nomecompleto,"/");
         strcat(nomecompleto,nomefile);
 
@@ -418,7 +418,6 @@ int appendToFile(const char* pathname, void* buf, size_t size, const char* dirna
 
     char tipo_op = 'a';
     int ret; 
-
     if (write(fd_skt, &tipo_op, sizeof(char)) == -1) {
         perror("appendToFile: SC write");
         return -1;
@@ -435,8 +434,6 @@ int appendToFile(const char* pathname, void* buf, size_t size, const char* dirna
         perror("appendToFile: SC write");
         return -1;
     }
-
-    size = strlen(buf);
 
     if (write(fd_skt, &size, sizeof(size_t)) == -1) {
         perror("appendToFile : SC read");

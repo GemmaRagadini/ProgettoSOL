@@ -1,0 +1,14 @@
+l server. Il test si intende superato se non si producono errori a run-time lato server e se il sunto delle statistiche
+prodotto dal server riporta “valori ragionevoli” (cioè, non ci sono valori negativi, valori troppo alti, campi vuoti,
+etc...).
+6. Script Bash per le statistiche
+Lo studente dovrà realizzare uno script Bash con nome statistiche.sh che effettua il parsing del file di log prodotto
+dal processo server durante la sua esecuzione, e produce un output formattato contenente le operazioni effettuate.
+Nello specifico, lo script produce sullo standard output, almeno le seguenti informazioni.
+- n. di read e size media delle letture in bytes
+- n. di write e size media delle scritture in bytes
+- n. di operazioni di lock
+- n. di operazioni di open-lock
+- n. di operazioni di unlock
+- n. di operazioni di close
+- dimensione massima i

@@ -19,21 +19,24 @@
 
 
 /*NOTE : 
-- devo considerare che alcune opzioni vanno chiamate in ordine 
 - errno ?
-- l'ordine delle opzioni influisce  
-- optarg nel caso -R 
+- alla fine del tesh.sh viene invalid free()
 */
 
 
 int main(int argc, char * argv[]) {
+
+    //struct che contiene le opzioni passate da riga di comando del client
+    Options options;
+
     //leggo file di configurazione del client -> tutto ok 
     FILE *config;
     if ( ( config = fopen ("config_client.txt", "r") ) == NULL ) { 
         perror("server : aprendo config_client.txt\n");
         exit(EXIT_FAILURE);
     }
-    Configura(config);
+
+    Configura(config, &options);
 
     fclose(config); 
 
@@ -41,31 +44,27 @@ int main(int argc, char * argv[]) {
     struct timespec abstime;
     abstime.tv_sec = 10;
 
-    //struct che contiene le opzioni passate da riga di comando del client
-    Options options;
+
 
     //campi da inizializzare 
     options.WOptionsNumber = 0;
     options.rOptionsNumber = 0;
-    options.uOptionsNumber = 0;
-    options.lOptionsNumber = 0;
     options.waitTime = 0;
     options.nFileDaLeggere = 0;
     options.nFileDaScrivere = 0;
     options.help = 0; 
     options.print = 0;
-    options.socketname = nome_socket_client;
-    options.dirname_w = (char*)malloc( 100 * sizeof(char));
     options.dirname_w = NULL;
-    options.dirname_Rr = (char*)malloc( 100 * sizeof(char));
     options.dirname_Rr = NULL;
+    // options.dirname_w = (char*)calloc( 100 , sizeof(char));
+    // options.dirname_Rr = (char*)calloc( 100 , sizeof(char)); 
 
     int c;
 
-    while ( (c =  getopt(argc, argv, "w:W:r:R::d:t:l:u:c:f:ph") ) != -1 ) {
+    while ( (c =  getopt(argc, argv, "w:W:r:R:d:t:l:u:c:f:ph") ) != -1 ) {
         switch (c) {
             case 't': 
-                options.waitTime = atoi(optarg);
+                options.waitTime = atoi(optarg)/1000;
                 break;
             case 'p': 
                 options.print = 1; //va considerato in tutte le funzioni 
@@ -74,45 +73,49 @@ int main(int argc, char * argv[]) {
                 options.help = 1;
                 break;
             case 'f': 
-                options.socketname = optarg;
+                strcpy(options.nome_socket_client, optarg); //viene sovrascritto rispetto a quello del file di configurazione
                 break;
             case 'd': 
-                options.dirname_Rr = optarg;
+                options.dirname_Rr = (char*)malloc(100* sizeof(char));
+                strcpy(options.dirname_Rr, optarg);
                 break;
             case 'W':
                 tokenizzaEInserisci(optarg, &options, 'W');
                 break;
             case 'w':
-                tokenizzaEInserisci(optarg, &options, 'w');
+                options.dirname_w = (char*)malloc(100 * sizeof(char) );
+                strcpy(options.dirname_w, optarg);
+                options.dirname_w[strlen(options.dirname_w)] = '\0';
                 break;
             case 'r': 
                 tokenizzaEInserisci(optarg, &options, 'r');
                 break; 
             case 'l': 
-                tokenizzaEInserisci(optarg, &options, 'l');
+                printf("L'opzione -l non è supportata\n");
+                break;
+            case 'c':
+                printf("L'opzione -c non è supportata\n");
                 break;
             case 'u': 
-                tokenizzaEInserisci(optarg, &options, 'u');
+                printf("L'opzione -u non è supportata\n");
                 break;
             case 'R': 
-                // printf("%s\n", optarg);
-                if (optarg != NULL) options.nFileDaLeggere = atoi(optarg);
-                else options.nFileDaLeggere = -1; //sarà il caso in cui li leggo tutti 
+                options.nFileDaLeggere = atoi(optarg); 
+                if (options.nFileDaLeggere == 0) options.nFileDaLeggere = -1;
                 break;
         }
     }
+
 
     //adesso guardo un campo alla volta e faccio le cose 
     if (options.help == 1) {
         StampaOpzioni();
         exit(EXIT_SUCCESS);
     } 
-    if ( strcmp(options.socketname, nome_socket_client ) != 0 ) {
-        strcpy(nome_socket_client, options.socketname);
-    }
+  
 
     //connessione con il server 
-    if (openConnection(nome_socket_client, 3, abstime) == -1)  exit(EXIT_FAILURE);
+    if (openConnection(options.nome_socket_client, 3, abstime) == -1)  exit(EXIT_FAILURE);
     
     if (options.print==1) printf("client connected\n");
 
@@ -150,27 +153,27 @@ int main(int argc, char * argv[]) {
                 size_t dim = ftell(file);
                 fseek(file, 0, SEEK_SET);
 
-                char * buffer = (char*)malloc( dim * sizeof(char));
-                
+                char * buffer = (char*)malloc( (dim+1) * sizeof(char));
+                memset(buffer,0,dim+1);
+            
                 if (fread(buffer,sizeof(char), dim, file) != dim ) { 
                     if (options.print == 1) fprintf(stderr, "fread di %s fallita\n", options.WOptions[i].names[j]);
                     return -1;
                 }
-
-                size_t size = strlen(buffer);
-
                 if (fclose(file) != 0) {
                     if (options.print == 1) fprintf(stderr, "fclose di %s fallita\n", options.WOptions[i].names[j]);
                     //non lo faccio fallire?
                 }
 
-
-                if (appendToFile(options.WOptions[i].names[j], buffer, size, NULL) == -1){
+             
+                if (appendToFile(options.WOptions[i].names[j], buffer, dim, NULL) == -1){
                     if (options.print == 1) fprintf(stderr, "appendToFile di %s fallita\n", options.WOptions[i].names[j]);
                     exit(EXIT_FAILURE);
                 }
                 
-                if (options.print==1) printf("appendToFile di %s eseguita con successo\n", options.WOptions[i].names[j]);
+                free(buffer);
+
+               // if (options.print==1) printf("appendToFile di %s eseguita con successo\n", options.WOptions[i].names[j]);
 
                 if (closeFile(options.WOptions[i].names[j]) == -1) {
                     if (options.print == 1) fprintf(stderr, "closeFile di %s fallita\n", options.WOptions[i].names[j]);
@@ -183,14 +186,14 @@ int main(int argc, char * argv[]) {
         }
     }
 
-    if (options.rOptionsNumber != 0) { //aggiungere di salvare in dirname 
+    if (options.rOptionsNumber != 0) {  
 
         sleep(options.waitTime);
 
-        void* buf = (void*)malloc(BUFSIZ * sizeof(void));
+        void* buf ;
         size_t size;
         for (int j = 0; j < options.rOptionsNumber; j++) {
-            for (int i = 0 ; i < options.rOptions->namesNumber; i++) {
+            for (int i = 0 ; i < options.rOptions->namesNumber ; i++) {
 
                 if (openFile( (options.rOptions[j]).names[i] , 0 ) == -1) {
                     if (options.print== 1) fprintf(stderr, "openFile di %s fallita\n", options.rOptions[j].names[i]);
@@ -203,7 +206,6 @@ int main(int argc, char * argv[]) {
                     if (options.print == 1) fprintf(stderr,"readFile di %s fallita\n", options.rOptions[j].names[i]);
                     exit(EXIT_FAILURE); //un po' too much? 
                 }
-
 
                 //lo salvo nella cartella dirname se è specificata
                 if (options.dirname_Rr != NULL) {
@@ -219,14 +221,14 @@ int main(int argc, char * argv[]) {
                     }
 
                     char * nomecompleto = (char*)malloc((strlen(options.dirname_Rr)+ strlen(nomefile)+ 1)*sizeof(char));
-                    strcpy( nomecompleto,dirname);
-                    nomecompleto[strlen(nomecompleto)-1] = '\0';
+                    nomecompleto = options.dirname_Rr;
+                    //strcpy( nomecompleto,options.dirname_Rr);
+                    nomecompleto[strlen(nomecompleto)] = '\0';
                     strcat(nomecompleto,"/");
                     strcat(nomecompleto,nomefile);
 
                     FILE * fd = fopen(nomecompleto , "w");
-
-                    if (fputs(buf,fd) == -1) {
+                    if (fputs((char*)buf, fd) == -1) { 
                         if (options.print == 1 ) fprintf(stderr, "readFile di %s fallita\n", nomecompleto );
                         return -1;
                     }
@@ -236,7 +238,6 @@ int main(int argc, char * argv[]) {
                         return -1;
                     }
 
-                    free(nomecompleto);//probabilmente ci vogliono anche altre free
                 }
 
                 
@@ -265,13 +266,14 @@ int main(int argc, char * argv[]) {
 
 
     if (options.nFileDaLeggere != 0) {
+
         sleep(options.waitTime);
 
         if (options.dirname_Rr == NULL) {
             if (options.print == 1) fprintf(stderr, "L'opzione R può essere usata solo congiuntamente all'opzione d\n");
             exit(EXIT_FAILURE);
         }
-        if (readNFiles(options.nFileDaLeggere, dirname) == -1) {
+        if (readNFiles(options.nFileDaLeggere, options.dirname_Rr) == -1) {
             fprintf(stderr, "readNFiles fallita\n");
             exit(EXIT_FAILURE);
         }
@@ -279,12 +281,14 @@ int main(int argc, char * argv[]) {
     }
 
 
-    if (closeConnection(nome_socket_client) == -1){
+    if (closeConnection(options.nome_socket_client) == -1){
         if (options.print == 1) fprintf(stderr, "closeConnection fallita\n");
         exit(EXIT_FAILURE);
     }
 
-    if (options.print==1) printf("Client disconnected\n");
+    if (options.print==1) printf("Client disconnected\n\n");
+    
+    closeOptions(&options);
     
     return 0;
 }    

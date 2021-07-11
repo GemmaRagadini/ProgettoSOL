@@ -76,49 +76,56 @@ void w_file_selector(char* dirname, int* n, int p) {
 
                       //cerco lunghezza del file 
 
-                      fseek(fl, 0, SEEK_END);
-                      size_t dim = ftell(fl);
-                      fseek(fl, 0, SEEK_SET);
+                        fseek(fl, 0, SEEK_END);
+                        size_t dim = ftell(fl);
+                        fseek(fl, 0, SEEK_SET);
+                        char * nomecompleto = (char*)malloc((strlen(dirname)+ strlen(file->d_name)+ 1)*sizeof(char));
+                        strcpy(nomecompleto, dirname);
+                        nomecompleto[strlen(nomecompleto)] = '\0';
+                        strcat(nomecompleto,"/");
+                        strcat(nomecompleto,file->d_name);
 
+                        char * buffer  = (char *)malloc( (dim+1) * sizeof(char));
+                        memset(buffer,0,dim+1);
 
-                        char * buffer  = (char *)malloc(dim * sizeof(char));
-                        if (fread(buffer, sizeof(char), dim , fl) == -1) {
+                        if (fread(buffer, sizeof(char), dim , fl) != dim) {
                           perror("w_file_selector: fread fallita, client"); 
                           return;
                         }      
 
 
-                        if (openFile(file->d_name, O_CREATE) == -1) {
-                          if (openFile(file->d_name, 0)== -1) {
+                        if (openFile(nomecompleto, O_CREATE) == -1) {
+                          if (openFile(nomecompleto, 0)== -1) {
                             perror("w_file_selector: openFile fallita, client"); 
                             return;
                           }
                         }
 
-                        if (p == 1) printf("openFile di %s effettuata con successo\n", file->d_name);
-
-                        if (appendToFile(file->d_name, buffer, dim, NULL) == -1) {
+                        if (p == 1) printf("openFile di %s effettuata con successo\n", nomecompleto);
+                        
+                        if (appendToFile(nomecompleto, buffer, dim, NULL) == -1) {
                           perror("w_file_selector: appendToFile fallita, client");
                           return;
                         }
 
-                        if (p == 1) printf("appendToFile di %s eseguita con successo\n", file->d_name);
+                        if (p == 1) printf("appendToFile di %s eseguita con successo\n", nomecompleto);
 
                         if (n != NULL) {
                             *n -= 1;
                         }
                         if (fclose(fl) != 0) {
-                          fprintf(stderr, "Errore durante la chiusura del file %s/%s\n", dirname, file->d_name);
+                          fprintf(stderr, "Errore durante la chiusura del file %s/%s\n", dirname, nomecompleto);
                         return;
                         }
 
-                        if (closeFile(file->d_name) == -1) {
+                        if (closeFile(nomecompleto) == -1) {
                           perror("closeFile fallita, client");
                           exit(EXIT_FAILURE);
                         }
 
+                        if (p == 1) printf("closeFile di %s eseguita con successo\n", nomecompleto);
+                        free(nomecompleto);
                         free(buffer);
-                        if (p == 1) printf("closeFile di %s eseguita con successo\n", file->d_name);
                     }
                 }
             }

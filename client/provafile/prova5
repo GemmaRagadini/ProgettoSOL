@@ -1,0 +1,15 @@
+Università di Pisa -- Dipartimento di Informatica
+Corso di Laurea in Informatica
+Progetto di Laboratorio di Sistemi Operativi
+a.a. 2020-21
+per Corso A e Corso B
+Data di pubblicazione: 4 Maggio 2021
+Data di revisione: 14 Maggio 2021
+- aggiunta l’API ‘readNFiles’ mancante.
+1. Introduzione
+Lo studente deve realizzare un file storage server in cui la memorizzazione dei file avviene in memoria
+principale. La capacità dello storage è fissata all’avvio e non varia dinamicamente durante l’esecuzione del server.
+Per poter leggere, scrivere o eliminare file all’interno del file storage, il client deve connettersi al server ed utilizzare
+una API che dovrà essere sviluppata dallo studente (come descritto nel seguito). Il server esegue tutte le operazioni
+richieste dai client operando sempre e solo in memoria principale e mai sul disco.
+La capacità del file storage, unitam

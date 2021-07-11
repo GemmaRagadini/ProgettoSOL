@@ -5,9 +5,6 @@
 #include <string.h>
 #include <stdlib.h>
 
-/*struttura dati per mantenere i token che (options->uOptions[ (options->uOptionsNumber) -1 ])engono fuori dalla tokenizzazione 
-delle stringhe di input del client
-*/
 
 
 typedef struct {
@@ -23,8 +20,6 @@ typedef struct {
 
     time_t waitTime;
 
-    char * socketname; 
-
     int nFileDaLeggere; //caso R
     char * dirname_Rr; //nome directory per il caso R e r 
 
@@ -38,15 +33,10 @@ typedef struct {
     Opt rOptions[10]; //per il caso r 
     int rOptionsNumber;
 
-    Opt lOptions[10]; // caso l 
-    int lOptionsNumber;
-
-    Opt uOptions[10]; //caso u 
-    int uOptionsNumber;
+    char * nome_socket_client;
 
 
 } Options; 
-
 
 
 
@@ -57,13 +47,22 @@ void tokenizzaEInserisci(char *stringa, Options * options, char k) {
 
         char *tmpstr;
         char *token = strtok_r(stringa, ",", &tmpstr);
-        
-        (options->WOptions[(options->WOptionsNumber)-1]).names = (char**)malloc(sizeof(char*) * 20);
-        (options->WOptions[(options->WOptionsNumber)-1]).namesNumber = 0;
-        (options->WOptions[(options->WOptionsNumber)-1]).names[(options->WOptions[(options->WOptionsNumber)-1]).namesNumber++] = token;
+        Opt * temp = &(options->WOptions[(options->WOptionsNumber) -1 ]);
+
+        temp->names = (char**)malloc(sizeof(char*) * 20);
+        temp->namesNumber = 0;
+        temp->names[temp->namesNumber] = (char*)malloc(sizeof(char) * ( strlen(token) +1));
+
+        strcpy ( temp->names[temp->namesNumber++],token);
+
+
         while (token) {
             token = strtok_r(NULL, ",", &tmpstr);
-            if (token != NULL) (options->WOptions[(options->WOptionsNumber)-1]).names[(options->WOptions[(options->WOptionsNumber)-1]).namesNumber++] = token;
+            if (token != NULL) {
+
+                temp->names[temp->namesNumber++] = (char*)malloc(sizeof(char) * ( strlen(token) +1));
+                strcpy ( temp->names[temp->namesNumber++],token);
+            }
         }
     }
     if (k == 'r') {
@@ -72,53 +71,27 @@ void tokenizzaEInserisci(char *stringa, Options * options, char k) {
 
         char *tmpstr;
         char *token = strtok_r(stringa, ",", &tmpstr);
+        Opt * temp = &(options->rOptions[(options->rOptionsNumber) -1 ]);
+        
+        temp->names = (char **) malloc(sizeof(char*) * 20);
+        temp->namesNumber = 0; 
 
-        (options->rOptions[(options->rOptionsNumber) -1 ]).names = (char **) malloc(sizeof(char*) * 20);
-        (options->rOptions[(options->rOptionsNumber) -1 ]).namesNumber = 0; 
-        (options->rOptions[(options->rOptionsNumber) -1 ]).names[(options->rOptions[ (options->rOptionsNumber) -1]).namesNumber++] = token;
+        temp->names[temp->namesNumber] = (char*)malloc(sizeof(char) * ( strlen(token) +1));
+
+
+        strcpy ( temp->names[temp->namesNumber++],token);
+        
         while (token) {
             token = strtok_r(NULL, ",", &tmpstr);
-            if (token != NULL) (options->rOptions[(options->rOptionsNumber) -1 ]).names[(options->rOptions[(options->rOptionsNumber)]).namesNumber++] = token;
+            if (token != NULL) {
+                
+                temp->names[temp->namesNumber++] = (char*)malloc(sizeof(char) * ( strlen(token) +1));
+                strcpy ( temp->names[temp->namesNumber++],token);
+            }
         }
 
     }
-    if ( k == 'l') {
-
-        (options->lOptionsNumber)++;
-
-        char *tmpstr;
-        char *token = strtok_r(stringa, ",", &tmpstr);
-
-        (options->lOptions[ (options->lOptionsNumber) -1]).names = (char **) malloc(sizeof(char*) * 20);
-        (options->lOptions[ (options->lOptionsNumber) -1]).namesNumber = 0; 
-        (options->lOptions[ (options->lOptionsNumber) -1]).names[(options->lOptions[ (options->lOptionsNumber) -1]).namesNumber++] = token;
-        while (token) {
-            token = strtok_r(NULL, ",", &tmpstr);
-            if (token != NULL) (options->lOptions[ (options->lOptionsNumber) -1]).names[(options->lOptions[ (options->lOptionsNumber) -1]).namesNumber++] = token;
-        }
-
-    }
-    if ( k == 'u') {
-
-        (options-> uOptionsNumber)++; 
-
-        char *tmpstr;
-        char *token = strtok_r(stringa, ",", &tmpstr);
-
-        (options->uOptions[ (options->uOptionsNumber) -1 ]).names = (char **) malloc(sizeof(char*) * 20);
-        (options->uOptions[ (options->uOptionsNumber) -1 ]).namesNumber = 0; 
-        (options->uOptions[ (options->uOptionsNumber) -1 ]).names[(options->uOptions[ (options->uOptionsNumber) -1 ]).namesNumber++] = token;
-        while (token) {
-            token = strtok_r(NULL, ",", &tmpstr);
-            if (token != NULL) (options->uOptions[ (options->uOptionsNumber) -1 ]).names[(options->uOptions[ (options->uOptionsNumber) -1 ]).namesNumber++] = token;
-        }
-    }
-    if (k == 'w') {
-        char *tmpstr;
-        char *token = strtok_r(stringa, ",", &tmpstr);
-        options->dirname_w = token;
-        if ( (token = strtok_r(NULL, ",", &tmpstr) ) != NULL) options->nFileDaScrivere = atoi(token);
-    }
+  
 
 }
 
@@ -132,6 +105,25 @@ void StampaOpzioni(){
     printf("-d dirname: cartella dove scrivere i file passati con '-r' o '-R'. Deve essere usata congiuntamente a quelle due opzioni\n");
     printf("t time: specifica il tempo in millisecondi che deve intercorrere tra l'invio di due richieste sucessive al server\n");
     printf("-p : abilita le stampe sullo standard output per ogni operazione\n");
+}
+
+void closeOptions(Options * options){
+    
+    free(options->dirname_w);
+    free(options->dirname_Rr);
+    free(options->nome_socket_client);
+
+    for (int i = 0; i < options->WOptionsNumber; i++) {
+        for (int j = 0; j < options->WOptions->namesNumber; j++)    {
+            free( (options->WOptions[i]).names[j]);
+        }
+    }
+    for (int i = 0; i < options->rOptionsNumber; i++) {
+        for (int j = 0; j < options->rOptions->namesNumber; j++)   { 
+        free( (options->rOptions[i]).names[j]);
+        }
+    }
+
 }
 
 
