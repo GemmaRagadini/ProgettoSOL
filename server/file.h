@@ -10,6 +10,9 @@
 /*
 - i controlli sullo spazio totale del server devono comprendere il +1?
 - lo spazio allocato non conta come memoria occupata? 
+-dopo aver fatto elimina un file non funziona cerca_f 
+- non è troppo grande la capacità totale del server nel test2? 
+
 */ 
 
 
@@ -22,10 +25,11 @@ typedef struct _client{
 typedef client * lista_client; 
 
 typedef struct _file {
-    char * pathname;
-    lista_client clients; 
+    char pathname[100];
+    lista_client * clients; 
     char * contenuto;
-    long size;
+    long size_allocata;
+    long size_contenuto;
     struct _file * next;
 }File;
 
@@ -44,19 +48,13 @@ void stampaLista(Coda_File ds) {
     }
 }
 
-/*calcola lo spazio occupato da un elemento della lista*/
-size_t spazioOccupato(File file) { //non sto contando lo spazio occupato dalla lista dei client-> verrebbe molto complicato 
-    if (file.contenuto == NULL) return 0;
-    return strlen(file.contenuto); 
-}
 
-
-int cerca_c(lista_client C, int fd){
-    if (C == NULL) return -1;
+int cerca_c(lista_client * C, int fd){
+    if (*C == NULL) return -1;
     
-    lista_client corrente = C;
+    lista_client corrente = *C;
     while (corrente != NULL) {
-        if ( (corrente->fdc) ==  fd  ) return 1;
+        if ( (corrente->fdc) ==  fd  )  return 1;
         corrente = corrente->next; 
     }
     return -1;
@@ -65,23 +63,20 @@ int cerca_c(lista_client C, int fd){
 
 int push_c(lista_client * C, int fd) {
 
-    if (cerca_c(*C, fd) == 1) {
+    if (cerca_c(C, fd) == 1) {
         perror("il client ha già aperto questo file, server\n");
         return -1;
     }
     lista_client nuovo = (lista_client)malloc(sizeof(client));
     nuovo->fdc = fd;
-    nuovo->next = NULL;
+    nuovo->next = *C;
 
-    if (*C == NULL) {
-        *C = nuovo;
-        return 1;
-    }
-
-    (*C)->next = nuovo;
+    *C = nuovo;
+  
     return 1;
 
 }
+
 
 int remove_c (lista_client *C, int fd) {
     if (*C == NULL) {
@@ -122,8 +117,8 @@ int isOpened(Coda_File ds, const char * pathname, int fd) { //1 se pathname è a
 
     Coda_File corrente = ds; 
     while (corrente != NULL) {
-        if (strcmp(corrente->pathname, pathname) == 0) 
-            return cerca_c(corrente->clients,fd);
+        if (strcmp(corrente->pathname, pathname) == 0)  return cerca_c( corrente->clients ,fd);
+
         corrente = corrente->next;
     }
 
@@ -150,7 +145,7 @@ int open_c(Coda_File *ds, const char * pathname, int fd) { //usato quando un cli
     Coda_File corrente = *ds;
     while (corrente != NULL) {
         if (strcmp(corrente->pathname, pathname) == 0 ) {
-            push_c(&(corrente->clients), fd);
+            push_c( corrente->clients, fd);
             return 1;
         }
         corrente = corrente->next;
@@ -181,7 +176,7 @@ int cerca_f(Coda_File ds,const char * pathname) { //1 se il file è presente, -1
 
 
 
-int eliminaUnFile(Coda_File *ds, Parametri_server * parametri){ //elimino un file dal fondo 
+int eliminaUnFile(Coda_File *ds, Parametri_server * parametri){ 
     printf("Elimino un file\n");
     if (*ds == NULL) {
         perror("impossibile eliminare un file perché lo storage è vuoto");
@@ -189,8 +184,18 @@ int eliminaUnFile(Coda_File *ds, Parametri_server * parametri){ //elimino un fil
     }
     Coda_File corrente = *ds;
     while(corrente->next != NULL) corrente = corrente->next;
-    parametri->spazio_occupato = parametri->spazio_occupato- spazioOccupato(*corrente); //va bene? 
-    free(corrente->pathname);
+    parametri->spazio_occupato = parametri->spazio_occupato - corrente->size_contenuto; 
+
+    lista_client cor = *(corrente->clients);
+    lista_client prec;
+    while (cor != NULL) {
+        prec = cor;
+        cor = cor->next;
+        free(prec);
+    }
+
+    free(corrente->clients);
+
     free(corrente->contenuto);
     free(corrente);
     (parametri->n_file)--;
@@ -201,7 +206,7 @@ int eliminaUnFile(Coda_File *ds, Parametri_server * parametri){ //elimino un fil
 /*ritorna il contenuto del file pathname sullo storage. Se il file è vuoto ritorna NULL*/
 char * contenuto_f(Coda_File ds, const char * pathname) {
     if (cerca_f(ds, pathname ) == -1) {
-        perror("il file di cui si cerca il contenuto non è presente nel server, server\n");
+        perror("il file di cui si cerca il contenuto non è presente nel server\n");
         return NULL;
     }
     Coda_File corrente = ds;
@@ -213,8 +218,22 @@ char * contenuto_f(Coda_File ds, const char * pathname) {
 }
 
 
+size_t dimensione_f(Coda_File ds, const char* pathname) {
+    if (cerca_f(ds, pathname ) == -1) {
+        perror("il file di cui si cerca la dimensione non è presente nel server");
+        return -1;
+    }
+    Coda_File corrente = ds;
+    while (corrente != NULL) {
+        if (strcmp(corrente->pathname, pathname) == 0) return corrente->size_contenuto;
+        corrente = corrente->next;
+    }
+    return -1;
+}
 
-int liberaSpazio(Coda_File *ds, char * buf, Parametri_server * parametri){
+
+
+int liberaSpazio(Coda_File *ds, const char * buf, Parametri_server * parametri){
     if (strlen(buf) > parametri->spazio_server) {
         perror("liberaSpazio: lo storage non è abbastanza grande da contenere il file");
         return -1;
@@ -227,19 +246,18 @@ int liberaSpazio(Coda_File *ds, char * buf, Parametri_server * parametri){
 
 
 
-int append(Coda_File * ds, const char * pathname, char * buf, Parametri_server *parametri) { 
+int append(Coda_File * ds, const char * pathname, char * buf, Parametri_server *parametri, size_t size) { 
 
     if (*ds == NULL) {
         perror("append: lo storage è vuoto");
         return -1;
     }
-    
     if (cerca_f(*ds, pathname) == -1) {
         fprintf(stderr, "il file %s non è presente nello storage\n", pathname);
         return -1;
     }
 
-    if (strlen(buf) + parametri->spazio_occupato > parametri->spazio_server ) {
+    if (size +1  + parametri->spazio_occupato > parametri->spazio_server ) {
         if (liberaSpazio(ds, buf, parametri) == -1) return -1;
     }
 
@@ -248,29 +266,27 @@ int append(Coda_File * ds, const char * pathname, char * buf, Parametri_server *
     while (corrente != NULL) {
 
         if (strcmp(corrente->pathname, pathname) == 0) {
+            if ( corrente->contenuto == NULL) {
 
-            if (corrente->contenuto == NULL) {
-                free(corrente->contenuto); 
-                corrente->contenuto = (char*)malloc( (strlen(buf)+1) * sizeof(char) ); 
-                corrente->size = (strlen(buf)+1) * sizeof(char);
+                corrente->size_contenuto = (size+1) * sizeof(char);
+                corrente->size_allocata = (size+1) * sizeof(char);
 
+                corrente->contenuto= (char*)malloc(sizeof(char) * (size +1));
                 strcpy(corrente->contenuto, buf);
-                parametri->spazio_occupato = parametri->spazio_occupato + spazioOccupato(*corrente);
 
+                parametri->spazio_occupato = parametri->spazio_occupato + size +1 ;
                 return 1;
             }
             
-            while ( corrente->size < strlen(corrente->contenuto) + strlen(buf) + 2  ) {
-                corrente->contenuto = (char*)realloc(corrente->contenuto, 2 * corrente->size);
-                corrente->size *=2;
+            while ( corrente->size_allocata < corrente->size_contenuto + size + 1  ) {
+                corrente->contenuto = (char*)realloc(corrente->contenuto, 2 * corrente->size_allocata);
+                corrente->size_allocata *=2;
             }
 
-            printf("%ld\n", corrente->size);
-            printf("%ld\n", strlen(corrente->contenuto ) + strlen(buf) +1 );
+            strcat(corrente->contenuto, buf);
+            corrente->size_contenuto = corrente->size_contenuto + size + 1;
 
-            corrente->contenuto = strcat(corrente->contenuto, buf);
-
-            parametri->spazio_occupato = parametri->spazio_occupato + spazioOccupato(*corrente);
+            parametri->spazio_occupato = parametri->spazio_occupato + size +1;
             return 1;
         }
         corrente = corrente->next;
@@ -282,9 +298,46 @@ int append(Coda_File * ds, const char * pathname, char * buf, Parametri_server *
         
 
 
+int write_f(Coda_File *ds, const char * pathname, char * buffer, Parametri_server * parametri, size_t size) { //il controllo che il client lo abbia aperto viene fatto nel server prima di chiamarla 
+    
+    if (*ds == NULL ) return -1; 
 
-int push_f( Coda_File * ds, const char * pathname, int fd, Parametri_server * parametri ) { //quando viene aperto con O_CREATE 
+    if (pathname == NULL) {
+        perror ("write_f : pathname illegale");
+        return -1;
+    }
 
+    if (size + parametri->spazio_occupato > parametri->spazio_server ) {
+        if (liberaSpazio(ds, buffer, parametri) == -1) return -1;
+    }
+
+    Coda_File corrente = *ds; 
+    while (corrente != NULL) {
+        if (strcmp(corrente->pathname, pathname) == 0) {
+            if (corrente->contenuto == NULL) {
+                corrente->size_allocata = (size +1) * sizeof(char);
+                corrente->size_contenuto = (size +1) * sizeof(char);
+                corrente->contenuto = buffer;
+                
+
+                parametri->spazio_occupato = parametri->spazio_occupato + corrente->size_contenuto;
+                return 1;
+            }
+            corrente->contenuto = buffer; //ci riscrive la stessa cosa, non cambia niente a livello di spazio e contenuto 
+            return 1;
+        }
+        corrente = corrente->next;
+    }
+    return -1;
+}
+
+
+
+
+
+
+
+int push_f( Coda_File * ds, char * pathname, int fd, Parametri_server * parametri ) { //quando viene aperto con O_CREATE 
     if (parametri->n_file == parametri->max_file) eliminaUnFile(ds, parametri);
 
     if (pathname == NULL) {
@@ -298,20 +351,19 @@ int push_f( Coda_File * ds, const char * pathname, int fd, Parametri_server * pa
     }
 
     Coda_File nuovo = (Coda_File)malloc(sizeof(File));
-    nuovo->pathname = (char*)malloc( (strlen(pathname)+1) * sizeof(char)); 
-    nuovo->contenuto = (char*)malloc(10 * sizeof(char)); 
+    strcpy(nuovo->pathname, pathname); 
+
+    nuovo->size_allocata = 0;
+    nuovo->size_contenuto = 0;
     nuovo->contenuto = NULL;
-
-    strcpy(nuovo->pathname, pathname);
-
     nuovo->next = NULL;
 
-    lista_client L = (lista_client)malloc(sizeof(client)); 
-    L = NULL;
-
-    push_c(&L, fd);
+    lista_client * L = (lista_client*)calloc(1, sizeof(lista_client));
 
     nuovo->clients = L; 
+
+    push_c(L, fd);
+
 
     if (*ds == NULL) {
         *ds = nuovo;
@@ -329,24 +381,6 @@ int push_f( Coda_File * ds, const char * pathname, int fd, Parametri_server * pa
 
 
 
-
-
-int write_f(Coda_File *ds, const char * pathname, char * buffer, Parametri_server * parametri) { //il controllo che il client lo abbia aperto viene fatto nel server prima di chiamarla 
-    if (*ds == NULL ) return -1; 
-    Coda_File corrente = *ds; 
-    while (corrente != NULL) {
-        if (strcmp(corrente->pathname, pathname) == 0) {
-            corrente->contenuto = (char*)realloc(corrente->contenuto,  (strlen(buffer)+ 1) * sizeof(char) ); //se è già scritto sovrascriverà
-            corrente->size = (strlen(buffer)+ 1) * sizeof(char);
-            strcpy(corrente->contenuto, buffer);
-            parametri->spazio_occupato = parametri->spazio_occupato + spazioOccupato(*corrente);
-            return 1;
-        }
-        corrente = corrente->next;
-    }
-    parametri->spazio_occupato = parametri->spazio_occupato + spazioOccupato(*corrente);
-    return -1;
-}
 
 
 int conta_f(Coda_File ds) {//restituisce il numero di file presenti e non vuoti (questo caso forse non si verifica mai )
@@ -373,12 +407,11 @@ int close_f(Coda_File *ds, const char * pathname, int fd) { //ritorna 0 in caso 
     Coda_File corrente = *ds;
     while (corrente != NULL) {
         if ( strcmp(corrente->pathname, pathname) == 0 ) {
-            lista_client c = corrente->clients; //puntatore? 
-            if (cerca_c(c,fd) == -1) {
+            if (cerca_c(corrente->clients,fd) == -1) {
                 perror("close di un file che non è stato aperto, server");
                 return -1;
             }
-            if (remove_c(&(corrente->clients),fd) != -1) return 1;
+            if (remove_c(corrente->clients,fd) != -1) return 1;
 
         }
         corrente = corrente->next; 
@@ -392,14 +425,15 @@ void closeStorage(Coda_File *ds) {
     while (corrente != NULL){
         precedente = corrente;
         corrente = corrente->next;
-        lista_client cor = precedente->clients;
+        lista_client cor = *(precedente->clients);
         lista_client prec;
         while (cor != NULL) {
             prec = cor;
             cor = cor->next;
             free(prec);
         }
-        free(precedente->pathname);
+
+        free(precedente->clients);
         free(precedente->contenuto);
         free(precedente);
     }

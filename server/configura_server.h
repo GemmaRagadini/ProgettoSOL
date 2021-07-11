@@ -37,7 +37,6 @@ void Configura(FILE * config, Parametri_server * parametri) {
 
     char * buffer = NULL; //per tenere la riga letta dal file
     char * ultimo; //per tenere l'ultimo token != NULL
-    parametri->nome_socket_server = (char*)malloc(30*sizeof(char));
     
     errorNUll(buffer = malloc( MAX_LEN * sizeof(char) ), config);
 
@@ -45,32 +44,32 @@ void Configura(FILE * config, Parametri_server * parametri) {
         //nome_socket
         if( strstr(buffer, "nome_socket") != NULL) {
             ultimo = tokenizer_r(buffer);
-            ultimo[strlen(ultimo)-1] = '\0';
+            if (ultimo[strlen(ultimo)-1] == '\n')   ultimo[strlen(ultimo)-1] = '\0';
+            parametri->nome_socket_server = (char*)malloc( sizeof(char)* (strlen(ultimo)+1));
             strcpy(parametri->nome_socket_server, ultimo);
         }
 
         //parametri->num_workers
         if( strstr(buffer, "num_workers") != NULL) { //sono nella riga dove è definito il numero di workers 
-            ultimo = tokenizer_r(buffer); 
-            ultimo[strlen(ultimo)-1] = '\0';
-            //sono arrivata alla fine , ultimo è l'ultimo token , quello che mi interessa 
+            ultimo = tokenizer_r(buffer);
+            if (ultimo[strlen(ultimo)-1] == '\n')   ultimo[strlen(ultimo)-1] = '\0';
             parametri->num_workers = atoi(ultimo); 
         }
 
         // parametri->spazio_server 
         if( strstr(buffer, "spazio_server") != NULL) {
             ultimo = tokenizer_r(buffer);
-            ultimo[strlen(ultimo)-1] = '\0';
+            if (ultimo[strlen(ultimo)-1] == '\n')   ultimo[strlen(ultimo)-1] = '\0';
             parametri->spazio_server = atoi(ultimo);
         }
 
         //parametri->max_file
         if( strstr(buffer, "max_file") != NULL) {
             ultimo = tokenizer_r(buffer);
-            ultimo[strlen(ultimo)-1] = '\0';
+            if (ultimo[strlen(ultimo)-1] == '\n')   ultimo[strlen(ultimo)-1] = '\0';
             parametri->max_file = atoi(ultimo);
         }
-        
+
     }
     free(buffer);
 }

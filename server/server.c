@@ -17,14 +17,18 @@
 #include "file.h"
 #include "configura_server.h"
 
+/*
+- se mando il client senza argomenti il server muore 
+*/
+
 
 int fd_skt; 
 
-JobList coda; //coda di jobs che devono essere eseguiti
+JobList * coda; //coda di jobs che devono essere eseguiti
 
 
 
-Coda_File storage; //struttura dati per i file 
+Coda_File * storage; //struttura dati per i file 
 
 Parametri_server parametri; //struttura in cui stanno i parametri presi dal file di configurazione
 
@@ -40,15 +44,8 @@ static pthread_mutex_t mtx2 = PTHREAD_MUTEX_INITIALIZER; //mutex per la DS
 
 
 
-/* 
-    - richiesta - risposta 
-    - master-workers 
-    - la write sembrerebbe funzionare ma non ha un'opzione per testarla direttamente 
-    - devo fare una libreria ? 
-    - come mai se faccio ctrl+c subito la open la fa comunque ? 
-*/
 
-int Open(const char * pathname,int fd, int flags) {
+int Open( char * pathname,int fd, int flags) {
 
     if (pathname == NULL) {
         perror("Open: pathname illegale, server\n");
@@ -59,12 +56,12 @@ int Open(const char * pathname,int fd, int flags) {
     switch (flags) {
         case O_CREATE|O_LOCK:;
         case O_CREATE: 
-                if (cerca_f(storage, pathname) == 1) {
-                printf("Fallita creazione di un file che era già presente sullo storage\n");
-                return -1;
-            }
+            printf("create\n");
+            if (cerca_f(*storage, pathname) == 1)   return -1;
 
-            if (push_f(&storage, pathname, fd, &parametri) == -1) {
+            printf("create\n");
+
+            if (push_f(storage, pathname, fd, &parametri) == -1) {
                 perror("Open: errore nel caricamento del file, server\n");
                 return -1;
             }
@@ -74,13 +71,12 @@ int Open(const char * pathname,int fd, int flags) {
         case O_LOCK:;
         case 0: 
 
-            if (cerca_f(storage, pathname) == -1) {
+            if (cerca_f(*storage, pathname) == -1) {
                 printf("fallita apertura di un file non presente nello storage\n");
                 return -1;
             }
 
-             //se è già stato aperto lo controlla file.h
-            if (open_c(&storage, pathname, fd) == -1 ) {
+            if (open_c(storage, pathname, fd) == -1 ) {
                 perror("Open: errore nell'apertura del file , server");
                 return -1;
             }
@@ -94,7 +90,7 @@ int Open(const char * pathname,int fd, int flags) {
 
 
 
-int Write(const char * pathname, int fd) { //funziona ovviamente solo nel caso di un file esistente nel FS -> da capire come gestire altrimenti 
+int Write(const char * pathname, int fd) {
 
 
     if (pathname == NULL) {
@@ -102,12 +98,12 @@ int Write(const char * pathname, int fd) { //funziona ovviamente solo nel caso d
         return -1;
     }
 
-    if (cerca_f(storage,pathname) == -1) {
+    if (cerca_f(*storage,pathname) == -1) {
         perror ("Write: il file non è presente nello storage");
         return -1;
     }
 
-    if (isOpened(storage,pathname,fd) == -1) {
+    if (isOpened(*storage,pathname,fd) == -1) {
         perror("Write : il file non è stato aperto dal client");
         return -1;
     }
@@ -119,12 +115,13 @@ int Write(const char * pathname, int fd) { //funziona ovviamente solo nel caso d
     }
 
     char * buffer = (char*)malloc( dim * sizeof(char));
+    memset(buffer, 0 , dim);
     if (read(fd, buffer, dim) == -1) {
         perror("Write: read del contenuto del file fallita");
         return -1;
     }
   
-    if (write_f(&storage, pathname, buffer, &parametri) == -1) { 
+    if (write_f(storage, pathname, buffer, &parametri, dim) == -1) { 
         perror ("Write: scrittura non andata a buon fine , server");
         return -1;
     }
@@ -143,7 +140,7 @@ int Close(const char * pathname, int fd) {
         return -1;
     }
 
-    if (close_f(&storage,pathname, fd) == -1) {
+    if (close_f(storage,pathname, fd) == -1) {
         perror("Close: errore in chiusura, server");
         return -1;
     }
@@ -154,7 +151,7 @@ int Close(const char * pathname, int fd) {
 
 
 
-int Read(const char * pathname, int fd, char ** buf) {
+int Read(const char * pathname, int fd, char ** buf ,size_t *size) {
 
 
     if (pathname == NULL) {
@@ -162,24 +159,23 @@ int Read(const char * pathname, int fd, char ** buf) {
         return -1;
     }
 
-    if (storage == NULL) {
+    if (*storage == NULL) {
         fprintf(stderr, "la lettura di %s è fallita perché lo storage è vuoto\n", pathname);
         return -1;
     }
 
-    if (cerca_f(storage, pathname) == -1) {
+    if (cerca_f(*storage, pathname) == -1) {
         perror("Read: il file non è presente nello storage, server");
         return -1;
     }
 
-    if (isOpened(storage, pathname, fd) == -1 ) {
+    if (isOpened(*storage, pathname, fd) == -1 ) {
         perror("Read: il file non è stato aperto dal client, server");
         return -1;
     }
     
-    if ( ( strcpy(*buf, contenuto_f(storage, pathname ) ) ) == NULL) return -1;
-
-    
+    *buf = contenuto_f(*storage, pathname );
+    *size = dimensione_f(*storage, pathname);
     return 1;
 }
 
@@ -199,12 +195,12 @@ int Append(char * pathname, int fd, char * buf, size_t size) {
         return -1;
     }
 
-    if (isOpened(storage, pathname, fd) == -1) { 
+    if (isOpened(*storage, pathname, fd) == -1) { 
         perror("Append: il file non è stato aperto dal client, server");
         return -1;
     }
 
-    if (append(&storage, pathname, buf, &parametri) == -1) {
+    if (append(storage, pathname, buf, &parametri, size) == -1) {
         perror("Append: scrittura fallita, storage");
         return -1;
     }
@@ -215,7 +211,7 @@ int Append(char * pathname, int fd, char * buf, size_t size) {
 
 
 int readN(int N, int fd){
-    int n = conta_f(storage); 
+    int n = conta_f(*storage); 
     if (n == 0) return n;  
     if (N <= 0) N = n;
     if (n > N) n = N;
@@ -225,16 +221,16 @@ int readN(int N, int fd){
     int l_pathname; 
     int l_buffer; 
     char * buffer;
-    Coda_File corrente = storage;
+    Coda_File corrente = *storage;
     if (write(fd, &n, sizeof(int)) == -1) {
         perror("readN : SC read numero letti, server");
-        return -1; //così li sballo tutti , è troppo (anche se eventualmente altri fossero andati a buon fine -> si può verificare questo caso  ?)
+        return -1;
     }
 
     while (cont < n && corrente != NULL) {
 
-        if (contenuto_f(storage, corrente->pathname) != NULL) { //forse questo non serve 
-            buffer = contenuto_f(storage, corrente->pathname);
+        if (contenuto_f(*storage, corrente->pathname) != NULL) { //forse questo non serve 
+            buffer = contenuto_f(*storage, corrente->pathname);
             l_pathname = (int)strlen(corrente->pathname);
             l_buffer = (int)strlen(buffer);
           
@@ -276,13 +272,20 @@ static void * worker(void * arg){
 
         Pthread_mutex_lock(&mtx1);
 
-        if ( (coda == NULL && parametri.isClosing) || parametri.closed) break;
-        while (coda == NULL && !parametri.closed) pthread_cond_wait(&cond, &mtx1); 
-        if ( (coda == NULL && parametri.isClosing) || parametri.closed) break;
+        if ( (*coda == NULL && parametri.isClosing) || parametri.closed) {
+            Pthread_mutex_unlock(&mtx1);
+            break;
+        }
+        while (*coda == NULL && !parametri.closed && !parametri.isClosing)  pthread_cond_wait(&cond, &mtx1);
+           
+        if ( (*coda == NULL && parametri.isClosing) || parametri.closed) {
+            Pthread_mutex_unlock(&mtx1);
+            break;
+        }
         
+        JobList estratto;
 
-        JobList estratto = (JobList)malloc(sizeof(JobElement));
-        estratto = Pop_W(&coda);
+        estratto = Pop_W(coda);
         Pthread_mutex_unlock(&mtx1);
         
         char tipo_op; //mi serve per ricordarmelo anche dopo aver fatto la free(estratto) 
@@ -298,13 +301,15 @@ static void * worker(void * arg){
 
         if (estratto->tipo_operazione == 'X') {
             if (read(estratto->fd, &(estratto->tipo_operazione), sizeof(char)) <= 0){
-                continue; //cosa voleva dire continue ? 
+                continue; 
             }
         }
         printf("%c\n", estratto->tipo_operazione);
 
-        char* pathname = (char*)malloc(BUFSIZ * sizeof(char));
+        char pathname[100];
+
         char * buf;
+
 
         switch(estratto->tipo_operazione) {
             case 'o':
@@ -348,14 +353,13 @@ static void * worker(void * arg){
                     break;
                 }
 
-                buf = (char*)malloc(BUFSIZ * sizeof(char) );
 
                 Pthread_mutex_lock(&mtx2);
 
 
                 ret = 0;
 
-                if ( Read(pathname, estratto->fd, &buf )== -1) {
+                if ( Read(pathname, estratto->fd, &buf, &size )== -1) {
                     fprintf(stderr,"lettura del file %s dallo storage fallita\n", pathname);
                     ret = -1;
                 }
@@ -364,24 +368,21 @@ static void * worker(void * arg){
 
                 if (write(estratto->fd, &ret, sizeof(int)) <= 0) {
                     perror("worker:SC write ret, server\n");
-                    break; //va bene?
+                    break;
                 }
 
                 if (ret == -1) break; 
 
-                size = strlen(buf);
-
                 if (write(estratto->fd, &size, sizeof(size_t) ) == -1 ) {
                     perror("worker : SC write size, server");
                     break;
+
                 }
 
                 if (write(estratto->fd, buf, size +1) == -1) { 
                     perror ("worker : SC write buf, server");
                     break;
                 }
-
-                free(buf);
 
                 break;
             case 'R' :
@@ -396,7 +397,7 @@ static void * worker(void * arg){
                 Pthread_mutex_unlock(&mtx2);
 
                 break;
-            case 'W' : //forse questo non lo devo mettere 
+            case 'W' : 
 
                     if ( read(estratto->fd, &l, sizeof(int)) == -1) {
                     perror("worker: SC read length, server\n");
@@ -417,7 +418,7 @@ static void * worker(void * arg){
 
                 break;
             case 'a' :
-
+                    printf("%ld\n", parametri.spazio_occupato);
                     if ( read(estratto->fd, &l, sizeof(int)) == -1) {
                     perror("worker: SC read length, server");
                     ret = -1;
@@ -436,18 +437,18 @@ static void * worker(void * arg){
                         break;
                     }
 
-                    buf = (char*)malloc(BUFSIZ * sizeof(char));
+                    buf = (char*)malloc( (size +1) * sizeof(char));
 
                     if (read(estratto->fd, buf, size +1) == -1) {
-                        perror("worker, SC read bufferr");  //forse ci aggiungerei di scrivere in che caso sono
+                        perror("worker, SC read bufferr");  
                         ret = -1;
                         break;
                     }
                     Pthread_mutex_lock(&mtx2);
                     ret = Append(pathname, estratto->fd, buf, size);
                     Pthread_mutex_unlock(&mtx2);
-                    free(buf);
 
+                    free(buf);
 
 
                 break;
@@ -494,7 +495,6 @@ static void * worker(void * arg){
 
         char k;
 
-        free(pathname);
         free(estratto);
 
 
@@ -507,7 +507,7 @@ static void * worker(void * arg){
             
 
                 Pthread_mutex_lock(&mtx1);
-                Push_W(&coda, job);
+                Push_W(coda, job);
                 pthread_cond_signal(&cond);  
                 Pthread_mutex_unlock(&mtx1); 
             }
@@ -527,6 +527,9 @@ void sighandler(int sig){
         case SIGHUP:
             close(fd_skt);
             parametri.isClosing = 1;
+            Pthread_mutex_lock(&mtx1);
+            pthread_cond_broadcast(&cond);  
+            Pthread_mutex_unlock(&mtx1);
          break;
         
         case SIGQUIT:
@@ -534,9 +537,8 @@ void sighandler(int sig){
         case SIGINT:{
             close(fd_skt);
             parametri.closed = 1;
-            close(fd_skt);
             Pthread_mutex_lock(&mtx1);
-            pthread_cond_signal(&cond);  
+            pthread_cond_broadcast(&cond);  
             Pthread_mutex_unlock(&mtx1);
         }break;
         case SIGPIPE:{
@@ -623,7 +625,7 @@ static void run_server(Parametri_server parametri) {
         
         Pthread_mutex_lock(&mtx1);
 
-        Push_W(&coda, job);
+        Push_W(coda, job);
 
         Pthread_mutex_unlock(&mtx1);
         pthread_cond_signal(&cond);
@@ -635,12 +637,18 @@ static void run_server(Parametri_server parametri) {
 }
 
 
-int main(){
-   
-    
+int main(int argc, char * argv[]){
+
+    char* nome_file = (char*)malloc(50 * sizeof(char));
+    strcpy(nome_file, "config_server_test1.txt"); //se non specifico un altro nome , il file di configurazione è quello del primo test 
+    if (argc == 2) strcpy(nome_file, argv[1]); 
+    if (argc > 2) {
+        perror("Numero di argomenti illegale");
+        exit(EXIT_FAILURE);
+    }
     //leggo dal file di configurazione del server 
     FILE *config;
-    if ( ( config = fopen ("config_server.txt", "r") ) == NULL ) { //apertura file di configurazione
+    if ( ( config = fopen (nome_file, "r") ) == NULL ) { //apertura file di configurazione
         perror("server : aprendo config_server.txt");
         exit(EXIT_FAILURE);
     }
@@ -651,19 +659,18 @@ int main(){
     
     
     fclose(config); 
+    free(nome_file);
 
     installSigHand();
-    //signal(SIGQUIT, sigQuitHandler);
     
-    coda = (JobList)malloc(sizeof(JobElement)); //coda dei job
-    coda = NULL;
+    coda = (JobList*)calloc(1,sizeof(JobList)); //coda dei job
+
+
     parametri.isClosing = 0; //dice se il server è in fase di chiusura pulita
     parametri.closed = 0; //per chiusura immediata
     
 
-    storage = (Coda_File)malloc(sizeof(File)); //DS per i file 
-    storage = NULL;
-   
+    storage = (Coda_File*)calloc(1, sizeof(Coda_File)); //DS per i file 
    
     //creo N thread workers:
     pthread_t workers[parametri.num_workers]; 
@@ -684,11 +691,13 @@ int main(){
 
 
     //chiusura di tutto 
-    closeStorage(&storage);
-    closeListaJob(&coda);
+    closeStorage(storage);
+    closeListaJob(coda);
+    free(coda);
+    free(storage);
     free(parametri.nome_socket_server);
  
- 
+
 
     return 0; 
 }
