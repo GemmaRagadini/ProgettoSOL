@@ -1,0 +1,5 @@
+Oltre all’implementazione di politiche di rimpiazzamento della cache più sofisticate rispetto alla politica FIFO
+richiesta, lo studente può, opzionalmente, implementare la memorizzazione dei file nella cache in formato
+compresso. In altri termini, il file viene ricevuto e spedito dai/ai client in formato non compresso, mentre la
+memorizzazione internamente al server avviene in formato compresso. Il formato della compressione è lasciato come
+libera scelta dello studente.
