@@ -1,0 +1,5 @@
+Il client viene configurato allo stesso modo del server, ma gli argomenti letti vengono inseriti in una struct
+Options che contiene tutti i parametri necessari alla connessione e alle richieste da fare al server. Il file di
+configurazione ha la stessa struttura di quello del server, ma è al momento vi è presente un solo parametro,
+ovvero il nome della socket. Se non specificato il nome della socket da riga di comando, il client utilizzerà
+quello letto da file di configurazione, altrimenti utilizzerà quello che è stato passato dall’utente.

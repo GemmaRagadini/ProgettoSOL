@@ -18,9 +18,7 @@ void w_file_selector(char* dirname, int* n, int p) {
     FILE * fl;
 
     if (chdir(dirname) == -1) {
-        if (p == 1) {
             fprintf(stderr, "Errore durante il tentativo di posizionamento nella directory %s\n", dirname);
-        } 
         return;
     }
 
@@ -31,9 +29,8 @@ void w_file_selector(char* dirname, int* n, int p) {
 
     DIR * dir = opendir(dirname);
     if (dir == NULL) {
-        if (p == 1) {
-            fprintf(stderr, "Errore aprendo la directory %s\n", dirname);
-        }
+        fprintf(stderr, "Errore aprendo la directory %s\n", dirname);
+
         return;
     } 
     else {
@@ -46,10 +43,8 @@ void w_file_selector(char* dirname, int* n, int p) {
             }
             struct stat info;
             if (stat(file->d_name, &info) == -1) {
-                if (p == 1) {
-                    fprintf(stderr, "Errore durante la stat su %s/%s\n", dirname, file->d_name);
-                    perror("");
-                }
+                fprintf(stderr, "Errore durante la stat su %s/%s\n", dirname, file->d_name);
+                perror("");
                 continue;
             }
             else {
@@ -59,9 +54,7 @@ void w_file_selector(char* dirname, int* n, int p) {
                         sprintf(new_dirname, "%s/%s", dirname, file->d_name);
                         w_file_selector(new_dirname, n, p);
                         if (chdir(dirname) == -1) {
-                            if (p == 1) {
-                                fprintf(stderr, "Errore durante il tentativo di posizionamento nella directory %s\n", dirname);
-                            } 
+                            fprintf(stderr, "Errore durante il tentativo di posizionamento nella directory %s\n", dirname);
                             return;
                         }
                     }

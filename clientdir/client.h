@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <dirent.h>
 
 /*gestione opzioni del client*/
 
@@ -45,23 +46,40 @@ void tokenizzaEInserisci(char *stringa, Options * options, char k) {
         
         (options->WOptionsNumber)++;
 
+        // controllo che i file passati esistano 
         char *tmpstr;
         char *token = strtok_r(stringa, ",", &tmpstr);
+        if (access(token, F_OK) != 0 ) {
+            fprintf(stderr, "Il file %s non è esistente\n", token);
+            return;
+        }
+        while (token) {
+            token = strtok_r(NULL, ",", &tmpstr);
+            if (token != NULL) {
+                
+                if (access(token, F_OK) != 0 ) {
+                    fprintf(stderr, "Il file %s non è esistente\n", token);
+                    return;
+                }
+            }
+        }
+
+        token = strtok_r(stringa, ",", &tmpstr);
         Opt * temp = &(options->WOptions[(options->WOptionsNumber) -1 ]);
 
         temp->names = (char**)malloc(sizeof(char*) * 200);
         temp->namesNumber = 0;
-        temp->names[temp->namesNumber] = (char*)malloc(sizeof(char) * ( strlen(token) +1));
 
+        temp->names[temp->namesNumber] = (char*)malloc(sizeof(char) * ( strlen(token) +1));
         strcpy ( temp->names[temp->namesNumber++],token);
 
 
         while (token) {
             token = strtok_r(NULL, ",", &tmpstr);
             if (token != NULL) {
-
+                
                 temp->names[temp->namesNumber++] = (char*)malloc(sizeof(char) * ( strlen(token) +1));
-                strcpy ( temp->names[temp->namesNumber++],token);
+                strcpy ( temp->names[temp->namesNumber],token);
             }
         }
     }
@@ -95,6 +113,13 @@ void tokenizzaEInserisci(char *stringa, Options * options, char k) {
     if (k == 'w'){
         char *tmpstr;
         char * token = strtok_r(stringa, ",", &tmpstr);
+        //controllo che la directory sia esistente 
+        DIR * dir = opendir(token);
+        if (!dir) {
+            fprintf(stderr, "La directory %s non è esistente\n", token);
+            return;
+        }
+
         options->dirname_w = (char*)malloc( ( strlen(token)+1 ) * sizeof(char));
         strcpy(options->dirname_w, token);
         if ( (token = strtok_r(NULL,  ",", &tmpstr) ) == NULL) options->nFileDaScrivere = -1;

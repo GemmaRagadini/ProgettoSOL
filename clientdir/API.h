@@ -47,11 +47,7 @@ int openConnection( const char* sockname, int msec, const struct timespec abstim
             return -1;
         }
      
-        if (errno == ECONNREFUSED) sleep(msec / 1000); //msec dovrebbe essere in millisecondi (altrimenti cambia) 
-        else {
-            perror("connection failed");
-            return -1;
-        }
+        sleep(msec / 1000); 
     }
     resetPath();
     return 0;

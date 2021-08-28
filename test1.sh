@@ -3,24 +3,39 @@ sleep 5
 cd serverdir
 valgrind --leak-check=full ./server &
 
+SERVER_PID=$!
+export SERVER_PID
+bash -c 'sleep 5 && kill -1 ${SERVER_PID}' &
+TIMER_PID=$!
+
+sleep 0.5
 cd ../clientdir
-CWD=$(pwd)
 
+echo "Scrittura di un file:"
+echo "Running client -t 500 -p -W $(pwd)/provafile/read"
+./client -t 500 -p -W "$(pwd)/provafile/read"
+sleep 0.2
 
-echo "Running client -t 500 -p -W $CWD/provafile/read"
-./client -t 500 -p -W "$CWD/provafile/read"
-sleep .2
+echo "Scrittura di tutti i file presenti in una directory:"
+echo "Running client -t 500 -p -w $(pwd)/provafile"
+./client -t 500 -p -w "$(pwd)/provafile"
+sleep 0.2
 
-echo "Running client -t 500 -p -w $CWD/provafile"
-./client -t 500 -p -w "$CWD/provafile"
-sleep .2
+echo "Lettura di un file e salvataggio in una directory:"
+echo "Running client -t 500 -p -r $(pwd)/provafile/read -d $(pwd)/dir1"
+./client -t 500 -p -d "$(pwd)/dir1" -r "$(pwd)/provafile/read"
+sleep 0.2
 
-echo "Running client -t 500 -p -r $CWD/provafile/read -d $CWD/dir"
-./client -t 500 -p -d "$CWD/dir" -r "$CWD/provafile/read"
-sleep .2
+echo "Scrittura di tutti i file e lettura di 3 file con salvataggio in una directory:"
+echo "Running client -t 500 -p -w $(pwd)/provafile -d $(pwd)/dir1 -R 3"
+./client -t 500 -p -w "$(pwd)/provafile" -d "$(pwd)/dir1" -R 3
+sleep 0.2
 
-echo "Running client -t 500 -p -w $CWD/provafile -d $CWD/dir -R 0"
-./client -t 500 -p -w "$CWD/provafile" -d "$CWD/dir" -R 0
-sleep .2
+echo "Lettura di tutti i file e salvataggio in una directory:"
+echo "Running client -t 500 -p -d $(pwd)/dir2 -R 0"
+./client -t 500 -p -d "$(pwd)/dir2" -R 0
+sleep 0.2
 
-kill -s HUP $(ps aux | grep sol_server | grep -v grep | awk -F " " '{print $2}')
+wait $TIMER_PID
+wait $SERVER_PID
+

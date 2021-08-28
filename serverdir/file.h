@@ -185,6 +185,8 @@ int eliminaUnFile(Coda_File *ds, Parametri_server * parametri){
     free(corrente->clients);
 
     free(corrente->contenuto);
+    printf("Il file %s è stato eliminato dallo storage\n", corrente->pathname);
+
     free(corrente);
     (parametri->n_file)--;
     return 1;

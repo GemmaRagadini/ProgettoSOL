@@ -3,23 +3,27 @@ sleep 5
 cd serverdir
 ./server config_server_test2.txt &
 
+SERVER_PID=$!
+export SERVER_PID
+bash -c 'sleep 5 && kill -1 ${SERVER_PID}' &
+TIMER_PID=$!
+
+sleep 0.5
+
 cd ../clientdir
 CWD=$(pwd)
 
-echo "Running client -t 500 -p -W $CWD/provafile/read"
-./client -t 500 -p -W "$CWD/provafile/read"
-sleep .2
+echo "Provo l'algoritmo di rimpiazzamento dei file:"
 
+echo "Scrivo tutti i file presenti nella directory $CWD/provafile"
 echo "Running client -t 500 -p -w $CWD/provafile"
 ./client -t 500 -p -w "$CWD/provafile"
 sleep .2
 
-echo "Running client -t 500 -p -r $CWD/provafile/read -d $CWD/dir"
-./client -t 500 -p -d "$CWD/dir" -r "$CWD/provafile/read"
-sleep .2
+echo "Lettura di tutti i file e salvataggio in una directory:"
+echo "Running client -t 500 -p -d $(pwd)/dir3 -R 0"
+./client -t 500 -p -d "$(pwd)/dir3" -R 0
+sleep 0.2
 
-echo "Running client -t 500 -p -w $CWD/provafile -d $CWD/dir -R 0"
-./client -t 500 -p -w "$CWD/provafile" -d "$CWD/dir" -R 0
-sleep .2
-
-kill -s HUP $(ps aux | grep sol_server | grep -v grep | awk -F " " '{print $2}')
+wait $TIMER_PID
+wait $SERVER_PID

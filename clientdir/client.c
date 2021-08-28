@@ -35,7 +35,7 @@ int main(int argc, char * argv[]) {
 
     //tempo massimo per openConnection
     struct timespec abstime;
-    abstime.tv_sec = 10;
+    abstime.tv_sec = 3;
 
 
 
@@ -96,187 +96,188 @@ int main(int argc, char * argv[]) {
     }
 
 
-    //adesso guardo un campo alla volta e faccio le cose 
     if (options.help == 1) {
         StampaOpzioni();
         exit(EXIT_SUCCESS);
     } 
   
-
     //connessione con il server 
-    if (openConnection(options.nome_socket_client, 30, abstime) == -1)  exit(EXIT_FAILURE);
-    
-    if (options.print==1) printf("client connected\n");
+    if (  !(options.WOptionsNumber == 0 && options.rOptionsNumber == 0 && options.dirname_w == NULL && options.nFileDaLeggere == 0) ) {
+
+        if (openConnection(options.nome_socket_client, 30, abstime) == -1)  exit(EXIT_FAILURE);
+        
+        if (options.print==1) printf("client connected\n");
 
 
 
-    if (options.WOptionsNumber != 0) {
+        if (options.WOptionsNumber != 0) {
 
-    sleep(options.waitTime);
+        sleep(options.waitTime);
 
-        for (int i = 0; i < options.WOptionsNumber; i++) {
-            for (int j = 0 ; j < (options.WOptions[i]).namesNumber; j++) {
+            for (int i = 0; i < options.WOptionsNumber; i++) {
+                for (int j = 0 ; j < (options.WOptions[i]).namesNumber; j++) {
 
-                if (openFile( (options.WOptions[i]).names[j] , O_CREATE) == -1) {
+                    if (openFile( (options.WOptions[i]).names[j] , O_CREATE) == -1) {
 
-                    if (openFile( (options.WOptions[i]).names[j] , 0 ) == -1) { 
-                        if (options.print == 1) fprintf(stderr, "openFile di %s fallita\n", options.WOptions[i].names[j]);
+                        if (openFile( (options.WOptions[i]).names[j] , 0 ) == -1) { 
+                            fprintf(stderr, "openFile di %s fallita\n", options.WOptions[i].names[j]);
+                            exit(EXIT_FAILURE);
+                        }
+
+            
+                    }
+                    if (options.print==1) printf("openFile di %s effettuata con successo\n", options.WOptions[i].names[j] );
+
+                    //qui è stato aperto con successo con O_CREATE
+
+                    FILE* file;
+                    if ( ( file = fopen(options.WOptions[i].names[j], "r") ) == NULL) {
+                        fprintf(stderr, "fopen di %s fallita", options.WOptions[i].names[j]);
+                        return -1;
+                    }
+
+
+                    //dimensione del file 
+                    fseek(file, 0, SEEK_END);
+                    size_t dim = ftell(file);
+                    fseek(file, 0, SEEK_SET);
+
+                    char * buffer = (char*)malloc( (dim+1) * sizeof(char));
+                    memset(buffer,0,dim+1);
+                
+                    if (fread(buffer,sizeof(char), dim, file) != dim ) { 
+                        fprintf(stderr, "fread di %s fallita\n", options.WOptions[i].names[j]);
+                        return -1;
+                    }
+                    if (fclose(file) != 0) {
+                        fprintf(stderr, "fclose di %s fallita\n", options.WOptions[i].names[j]);
+                    }
+
+                    if (appendToFile(options.WOptions[i].names[j], buffer, dim, NULL) == -1){
+                        if (options.print == 1) fprintf(stderr, "appendToFile di %s fallita\n", options.WOptions[i].names[j]);
+                        exit(EXIT_FAILURE);
+                    }
+                    
+                    free(buffer);
+
+                    if (options.print==1) printf("appendToFile di %s eseguita con successo\n", options.WOptions[i].names[j]);
+
+                    if (closeFile(options.WOptions[i].names[j]) == -1) {
+                        if (options.print == 1) fprintf(stderr, "closeFile di %s fallita\n", options.WOptions[i].names[j]);
                         exit(EXIT_FAILURE);
                     }
 
-        
-                }
-                if (options.print==1) printf("openFile di %s effettuata con successo\n", options.WOptions[i].names[j] );
-
-                //qui è stato aperto con successo con O_CREATE
-
-                FILE* file;
-                if ( ( file = fopen(options.WOptions[i].names[j], "r") ) == NULL) {
-                    if (options.print == 1) fprintf(stderr, "fopen di %s fallita", options.WOptions[i].names[j]);
-                    return -1;
-                }
-
-
-                //dimensione del file 
-                fseek(file, 0, SEEK_END);
-                size_t dim = ftell(file);
-                fseek(file, 0, SEEK_SET);
-
-                char * buffer = (char*)malloc( (dim+1) * sizeof(char));
-                memset(buffer,0,dim+1);
-            
-                if (fread(buffer,sizeof(char), dim, file) != dim ) { 
-                    if (options.print == 1) fprintf(stderr, "fread di %s fallita\n", options.WOptions[i].names[j]);
-                    return -1;
-                }
-                if (fclose(file) != 0) {
-                    if (options.print == 1) fprintf(stderr, "fclose di %s fallita\n", options.WOptions[i].names[j]);
-                }
-
-                if (appendToFile(options.WOptions[i].names[j], buffer, dim, NULL) == -1){
-                    if (options.print == 1) fprintf(stderr, "appendToFile di %s fallita\n", options.WOptions[i].names[j]);
-                    exit(EXIT_FAILURE);
-                }
-                
-                free(buffer);
-
-                if (options.print==1) printf("appendToFile di %s eseguita con successo\n", options.WOptions[i].names[j]);
-
-                if (closeFile(options.WOptions[i].names[j]) == -1) {
-                    if (options.print == 1) fprintf(stderr, "closeFile di %s fallita\n", options.WOptions[i].names[j]);
-                    exit(EXIT_FAILURE);
-                }
-
-                if (options.print==1) printf("closeFile di %s eseguita con successo\n", options.WOptions[i].names[j]);
-                
-            }
-        }
-    }
-
-    if (options.rOptionsNumber != 0) {  
-
-        sleep(options.waitTime);
-
-        void* buf ;
-        size_t size;
-        for (int j = 0; j < options.rOptionsNumber; j++) {
-            for (int i = 0 ; i < options.rOptions->namesNumber ; i++) {
-
-                if (openFile( (options.rOptions[j]).names[i] , 0 ) == -1) {
-                    if (options.print== 1) fprintf(stderr, "openFile di %s fallita\n", options.rOptions[j].names[i]);
-                    exit(EXIT_FAILURE);
-                }
-                if (options.print==1) printf("openFile di %s effettuata con successo\n", options.rOptions[j].names[i] );
-            
-
-                if (readFile(options.rOptions[j].names[i], &buf, &size) == -1) {
-                    if (options.print == 1) fprintf(stderr,"readFile di %s fallita\n", options.rOptions[j].names[i]);
-                    exit(EXIT_FAILURE); //un po' too much? 
-                }
-
-                //lo salvo nella cartella dirname se è specificata
-                if (options.dirname_Rr != NULL) {
+                    if (options.print==1) printf("closeFile di %s eseguita con successo\n", options.WOptions[i].names[j]);
                     
-                     //estraggo il nome della stringa dal pathname
-                    char * tmpstr;
-                    char * nomefile = (char*)malloc( sizeof(char) * (strlen(options.rOptions[j].names[i]) +1));
-                    strcpy(nomefile, options.rOptions[j].names[i]);
-                    char * str = strtok_r(nomefile, "/", &tmpstr); 
-                    while (str != NULL){
-                        nomefile= str; 
-                        str = strtok_r(NULL, "/", &tmpstr );
-                    }
-
-                    char * nomecompleto = (char*)malloc((strlen(options.dirname_Rr)+ strlen(nomefile)+ 1)*sizeof(char));
-                    nomecompleto = options.dirname_Rr;
-
-                    nomecompleto[strlen(nomecompleto)] = '\0';
-                    strcat(nomecompleto,"/");
-                    strcat(nomecompleto,nomefile);
-
-                    FILE * fd = fopen(nomecompleto , "w");
-                    if (fputs((char*)buf, fd) == -1) { 
-                        if (options.print == 1 ) fprintf(stderr, "readFile di %s fallita\n", nomecompleto );
-                        return -1;
-                    }
-
-                    if (fclose(fd) == -1) {
-                        fprintf(stderr, "readNFiles: fclose di %s fallita\n", nomecompleto);
-                        return -1;
-                    }
-
                 }
+            }
+        }
 
+        if (options.rOptionsNumber != 0) {  
+
+            sleep(options.waitTime);
+
+            void* buf ;
+            size_t size;
+            for (int j = 0; j < options.rOptionsNumber; j++) {
+                for (int i = 0 ; i < options.rOptions->namesNumber ; i++) {
+
+                    if (openFile( (options.rOptions[j]).names[i] , 0 ) == -1) {
+                        if (options.print== 1) fprintf(stderr, "openFile di %s fallita\n", options.rOptions[j].names[i]);
+                        exit(EXIT_FAILURE);
+                    }
+                    if (options.print==1) printf("openFile di %s effettuata con successo\n", options.rOptions[j].names[i] );
                 
-                if (options.print==1) printf("readFile di %s effettuata con successo\n", options.rOptions[j].names[i] );
 
-                if (closeFile(options.rOptions[j].names[i]) == -1) {
-                    if (options.print == 1) fprintf(stderr,"closeFile di %s fallita\n", options.rOptions[j].names[i]);
-                    exit(EXIT_FAILURE);
+                    if (readFile(options.rOptions[j].names[i], &buf, &size) == -1) {
+                        if (options.print == 1) fprintf(stderr,"readFile di %s fallita\n", options.rOptions[j].names[i]);
+                        exit(EXIT_FAILURE); //un po' too much? 
+                    }
+
+                    //lo salvo nella cartella dirname se è specificata
+                    if (options.dirname_Rr != NULL) {
+                        
+                        //estraggo il nome della stringa dal pathname
+                        char * tmpstr;
+                        char * nomefile = (char*)malloc( sizeof(char) * (strlen(options.rOptions[j].names[i]) +1));
+                        strcpy(nomefile, options.rOptions[j].names[i]);
+                        char * str = strtok_r(nomefile, "/", &tmpstr); 
+                        while (str != NULL){
+                            nomefile= str; 
+                            str = strtok_r(NULL, "/", &tmpstr );
+                        }
+
+                        char * nomecompleto = (char*)malloc((strlen(options.dirname_Rr)+ strlen(nomefile)+ 1)*sizeof(char));
+                        nomecompleto = options.dirname_Rr;
+
+                        nomecompleto[strlen(nomecompleto)] = '\0';
+                        strcat(nomecompleto,"/");
+                        strcat(nomecompleto,nomefile);
+
+                        FILE * fd = fopen(nomecompleto , "w");
+                        if (fputs((char*)buf, fd) == -1) { 
+                            if (options.print == 1 ) fprintf(stderr, "readFile di %s fallita\n", nomecompleto );
+                            return -1;
+                        }
+
+                        if (fclose(fd) == -1) {
+                            fprintf(stderr, "readNFiles: fclose di %s fallita\n", nomecompleto);
+                            return -1;
+                        }
+
+                    }
+
+                    
+                    if (options.print==1) printf("readFile di %s effettuata con successo\n", options.rOptions[j].names[i] );
+
+                    if (closeFile(options.rOptions[j].names[i]) == -1) {
+                        if (options.print == 1) fprintf(stderr,"closeFile di %s fallita\n", options.rOptions[j].names[i]);
+                        exit(EXIT_FAILURE);
+                    }
+
+                    if (options.print==1) printf("closeFile di %s effettuata con successo\n\n", options.rOptions[j].names[i] );
+
                 }
-
-                if (options.print==1) printf("closeFile di %s effettuata con successo\n\n", options.rOptions[j].names[i] );
 
             }
-
-        }
- 
-    }
-
-
-
-    if (options.dirname_w != NULL) { 
-        sleep(options.waitTime);
-        w_file_selector(options.dirname_w, &(options.nFileDaScrivere), options.print); //chiama la append sui i file nella directory dirname 
-    }
-
-
-
-    if (options.nFileDaLeggere != 0) {
-
-        sleep(options.waitTime);
-
-        if (options.dirname_Rr == NULL) {
-            if (options.print == 1) fprintf(stderr, "L'opzione R può essere usata solo congiuntamente all'opzione d\n");
-            exit(EXIT_FAILURE);
-        }
-        if (readNFiles(options.nFileDaLeggere, options.dirname_Rr) == -1) {
-            fprintf(stderr, "readNFiles fallita\n");
-            exit(EXIT_FAILURE);
-        }
-        if (options.print==1) printf("readNFiles effettuata con successo\n");
-    }
-
-
-
-
-    if (closeConnection(options.nome_socket_client) == -1){
-        if (options.print == 1) fprintf(stderr, "closeConnection fallita\n");
-        exit(EXIT_FAILURE);
-    }
-
-    if (options.print==1) printf("Client disconnected\n\n");
     
+        }
+
+
+
+        if (options.dirname_w != NULL) { 
+            sleep(options.waitTime);
+            w_file_selector(options.dirname_w, &(options.nFileDaScrivere), options.print); //chiama la append sui i file nella directory dirname 
+        }
+
+
+
+        if (options.nFileDaLeggere != 0) {
+
+            sleep(options.waitTime);
+
+            if (options.dirname_Rr == NULL) {
+                fprintf(stderr, "L'opzione R può essere usata solo congiuntamente all'opzione d\n");
+                exit(EXIT_FAILURE);
+            }
+            if (readNFiles(options.nFileDaLeggere, options.dirname_Rr) == -1) {
+                fprintf(stderr, "readNFiles fallita\n");
+                exit(EXIT_FAILURE);
+            }
+            if (options.print==1) printf("readNFiles effettuata con successo\n");
+        }
+
+
+
+
+        if (closeConnection(options.nome_socket_client) == -1){
+            if (options.print == 1) fprintf(stderr, "closeConnection fallita\n");
+            exit(EXIT_FAILURE);
+        }
+
+        if (options.print==1) printf("Client disconnected\n\n");
+    }
+
     closeOptions(&options);
     
     return 0;

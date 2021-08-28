@@ -114,12 +114,7 @@ int Write(const char * pathname, int fd) {
     while ( (cnt += read(fd, buffer, dim)) > 0) {
         if (cnt == dim) break;
     } 
-    // char * buffer = (char*)malloc( dim * sizeof(char));
-    // memset(buffer, 0 , dim);
-    // if (read(fd, buffer, dim) == -1) {
-    //     perror("Write: read del contenuto del file fallita");
-    //     return -1;
-    // }
+   
   
     if (write_f(storage, pathname, buffer, &parametri, dim) == -1) { 
         perror ("Write: scrittura non andata a buon fine , server");
@@ -303,7 +298,7 @@ static void * worker(void * arg){
                 continue; 
             }
         }
-        printf("%c\n", estratto->tipo_operazione);
+        if (estratto->tipo_operazione != 'z') printf("%c\n", estratto->tipo_operazione);
 
         char pathname[100];
 
@@ -479,9 +474,9 @@ static void * worker(void * arg){
                 break;
         }
 
-        if (estratto->tipo_operazione != 'r') {
+        if (estratto->tipo_operazione != 'r' && estratto->tipo_operazione != 'z') {
             if (write(estratto->fd, &ret, sizeof(int)) <= 0) {
-                perror("worker:SC write ret, server\n");
+                perror("client disconnected, cannot send response\n");
             }
         }
 
@@ -545,9 +540,7 @@ void sighandler(int sig){
             pthread_cond_broadcast(&cond);  
             Pthread_mutex_unlock(&mtx1);
         }break;
-        case SIGPIPE:{
-            ; // Ignoro SIGPIPE
-        }
+     
         default:{
             abort();
         }
@@ -643,6 +636,7 @@ static void run_server(Parametri_server parametri) {
 
 int main(int argc, char * argv[]){
 
+
     char* nome_file = (char*)malloc(50 * sizeof(char));
     strcpy(nome_file, "config_server_test1.txt"); //se non specifico un altro nome , il file di configurazione è quello del primo test 
     if (argc == 2) strcpy(nome_file, argv[1]); 
@@ -667,6 +661,7 @@ int main(int argc, char * argv[]){
     free(nome_file);
 
     installSigHand();
+    signal(SIGPIPE, SIG_IGN); //ignoro sigpipe
     
     coda = (JobList*)calloc(1,sizeof(JobList)); //coda dei job
 

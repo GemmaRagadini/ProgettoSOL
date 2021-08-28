@@ -1,0 +1,9 @@
+Open : aggiunge un nuovo file con contenuto vuoto allo storage e lo rende aperto da parte del client che ha
+richiesto l’operazione , oppure apre semplicemente il file per il client. Read : legge il contenuto del file di cui
+è stata richiesta la lettura e lo restituisce. readN : legge e restituisce il contenuto del numero di file richiesto
+(scelti in ordine dalla struttura dati) e restituisce il numero di file effettivamente letti. Questo e quello della
+prossima funzione sono gli unici casi in cui parte della comunicazione sulla socket viene fatta in una funzione
+chiamata da quella che esegue il worker, e non direttamente da quest’ultima. Write: legge un buffer dalla
+socket e lo scrive nel contenuto del file (se presente sullo storage ) corrispondente al pathanme passato. Se
+il file è già stato scritto, ne sovrascrive il contenuto. Append: scrive in append al contenuto del file il buffer
+passato Close

@@ -1,6 +1,6 @@
 #Makefile
 CC = gcc
-CFLAGS = -Wall -g -std=c99 -pthread
+CFLAGS = -Wall -g -std=c99 -pthread -D_POSIX_C_SOURCE=200112L
 CWD= $(pwd)
 CLIENTDIR = clientdir
 SERVERDIR = serverdir
